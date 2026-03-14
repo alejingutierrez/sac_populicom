@@ -1,0 +1,25 @@
+{
+  "name": "@sac/infra-cdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run typecheck",
+    "cdk:synth": "cdk synth",
+    "cdk:deploy": "cdk deploy"
+  },
+  "dependencies": {
+    "@sac/config": "workspace:*",
+    "aws-cdk": "^2.1037.0",
+    "aws-cdk-lib": "^2.227.0",
+    "constructs": "^10.4.2",
+    "source-map-support": "^0.5.21"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "tsx": "^4.20.6"
+  }
+}

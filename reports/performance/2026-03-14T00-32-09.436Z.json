@@ -1,0 +1,76 @@
+{
+  "generatedAt": "2026-03-14T00:32:09.437Z",
+  "baseUrl": "http://127.0.0.1:3300",
+  "results": [
+    {
+      "name": "dashboard_page",
+      "path": "/",
+      "iterations": 36,
+      "concurrency": 6,
+      "totalDurationMs": 101.40983399999959,
+      "requestsPerSecond": 355,
+      "successRate": 100,
+      "minMs": 8.25,
+      "maxMs": 32.34,
+      "avgMs": 16.8,
+      "p50Ms": 15.44,
+      "p95Ms": 22.02
+    },
+    {
+      "name": "mentions_page",
+      "path": "/mentions",
+      "iterations": 36,
+      "concurrency": 6,
+      "totalDurationMs": 93.53904199999988,
+      "requestsPerSecond": 384.87,
+      "successRate": 100,
+      "minMs": 6.19,
+      "maxMs": 25.19,
+      "avgMs": 15.55,
+      "p50Ms": 15.76,
+      "p95Ms": 17.42
+    },
+    {
+      "name": "bandeja_page",
+      "path": "/bandeja",
+      "iterations": 36,
+      "concurrency": 6,
+      "totalDurationMs": 66.27649999999994,
+      "requestsPerSecond": 543.18,
+      "successRate": 100,
+      "minMs": 9.87,
+      "maxMs": 12.76,
+      "avgMs": 11.01,
+      "p50Ms": 10.8,
+      "p95Ms": 12.68
+    },
+    {
+      "name": "dashboard_api",
+      "path": "/api/dashboard/summary",
+      "iterations": 36,
+      "concurrency": 6,
+      "totalDurationMs": 18.235541000000012,
+      "requestsPerSecond": 1974.17,
+      "successRate": 100,
+      "minMs": 0.83,
+      "maxMs": 5.6,
+      "avgMs": 2.86,
+      "p50Ms": 2.93,
+      "p95Ms": 5.56
+    },
+    {
+      "name": "mentions_api",
+      "path": "/api/mentions?agencyId=pr-central&source=social",
+      "iterations": 36,
+      "concurrency": 6,
+      "totalDurationMs": 15.435292000000118,
+      "requestsPerSecond": 2332.32,
+      "successRate": 100,
+      "minMs": 0.65,
+      "maxMs": 4.04,
+      "avgMs": 2.39,
+      "p50Ms": 1.81,
+      "p95Ms": 3.98
+    }
+  ]
+}

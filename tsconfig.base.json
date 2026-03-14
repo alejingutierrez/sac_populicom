@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "strict": true,
+    "noEmit": true,
+    "allowJs": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@sac/auth": ["packages/auth/src/index.ts"],
+      "@sac/brandwatch": ["packages/brandwatch/src/index.ts"],
+      "@sac/config": ["packages/config/src/index.ts"],
+      "@sac/db": ["packages/db/src/index.ts"],
+      "@sac/service-exports": ["services/exports/src/index.ts"],
+      "@sac/service-ingestion": ["services/ingestion/src/index.ts"],
+      "@sac/service-notifications": ["services/notifications/src/index.ts"],
+      "@sac/ui": ["packages/ui/src/index.tsx"]
+    },
+    "types": ["node"]
+  }
+}

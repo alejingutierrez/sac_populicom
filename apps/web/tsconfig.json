@@ -1,0 +1,49 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "apps/web/*"
+      ],
+      "@sac/auth": [
+        "packages/auth/src/index.ts"
+      ],
+      "@sac/brandwatch": [
+        "packages/brandwatch/src/index.ts"
+      ],
+      "@sac/config": [
+        "packages/config/src/index.ts"
+      ],
+      "@sac/db": [
+        "packages/db/src/index.ts"
+      ],
+      "@sac/service-exports": [
+        "services/exports/src/index.ts"
+      ],
+      "@sac/service-ingestion": [
+        "services/ingestion/src/index.ts"
+      ],
+      "@sac/service-notifications": [
+        "services/notifications/src/index.ts"
+      ],
+      "@sac/ui": [
+        "packages/ui/src/index.tsx"
+      ]
+    },
+    "incremental": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

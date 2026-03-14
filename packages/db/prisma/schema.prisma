@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agency {
+  id          String       @id
+  name        String
+  slug        String       @unique
+  isActive    Boolean      @default(true)
+  users       UserRole[]
+  mentions    Mention[]
+  alerts      Alert[]
+  cases       Case[]
+  savedFilter SavedFilter[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model User {
+  id          String       @id
+  email       String       @unique
+  displayName String
+  roles       UserRole[]
+  cases       Case[]       @relation("CaseAssignee")
+  events      CaseEvent[]
+  audits      AuditLog[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model UserRole {
+  id       String @id @default(cuid())
+  userId   String
+  agencyId String
+  role     String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agency Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agencyId, role])
+}
+
+model BrandwatchSyncRun {
+  id             String   @id @default(cuid())
+  agencyId       String
+  cursor         String?
+  sourceWindow   String
+  fetchedCount   Int
+  insertedCount  Int
+  duplicateCount Int
+  status         String
+  startedAt      DateTime
+  finishedAt     DateTime
+  createdAt      DateTime @default(now())
+}
+
+model Mention {
+  id            String          @id
+  agencyId      String
+  externalId    String
+  source        String
+  channel       String
+  title         String?
+  body          String
+  url           String
+  language      String
+  sentiment     String
+  priority      String
+  authorName    String
+  authorHandle  String?
+  topics        String[]
+  keywords      String[]
+  isCritical    Boolean         @default(false)
+  occurredAt    DateTime
+  receivedAt    DateTime
+  rawObjectKey  String?
+  engagement    Json
+  agency        Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  tags          MentionTag[]
+  authors       MentionAuthor[]
+  alerts        Alert[]
+  cases         Case[]
+
+  @@unique([agencyId, externalId, source])
+  @@index([agencyId, occurredAt])
+}
+
+model MentionTag {
+  id        String   @id @default(cuid())
+  mentionId String
+  label     String
+  mention   Mention  @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+}
+
+model MentionAuthor {
+  id           String  @id @default(cuid())
+  mentionId     String
+  displayName   String
+  handle        String?
+  followerCount Int?
+  mention       Mention @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+}
+
+model Alert {
+  id          String          @id
+  agencyId    String
+  mentionId   String
+  title       String
+  description String
+  severity    String
+  status      String
+  createdAt   DateTime
+  updatedAt   DateTime
+  agency      Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  mention     Mention         @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  deliveries  AlertDelivery[]
+  cases       Case[]
+}
+
+model AlertDelivery {
+  id          String   @id @default(cuid())
+  alertId     String
+  channel     String
+  recipient   String
+  status      String
+  deliveredAt DateTime?
+  createdAt   DateTime @default(now())
+  alert       Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
+}
+
+model Case {
+  id           String      @id
+  agencyId     String
+  mentionId    String?
+  alertId      String?
+  title        String
+  summary      String
+  status       String
+  priority     String
+  assignedToId String?
+  createdById  String
+  createdAt    DateTime
+  updatedAt    DateTime
+  agency       Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  mention      Mention?    @relation(fields: [mentionId], references: [id], onDelete: SetNull)
+  alert        Alert?      @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  assignee     User?       @relation("CaseAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy    User        @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  events       CaseEvent[]
+}
+
+model CaseEvent {
+  id          String   @id
+  caseId       String
+  actorId      String
+  type         String
+  description  String
+  createdAt    DateTime
+  parentCase   Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  actor        User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+}
+
+model SavedFilter {
+  id        String   @id
+  agencyId   String
+  ownerId    String
+  scope      String
+  payload    Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  agency     Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String   @id
+  actorId     String
+  agencyId    String
+  action      String
+  subjectType String
+  subjectId   String
+  metadata    Json
+  createdAt   DateTime
+  actor       User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+}
