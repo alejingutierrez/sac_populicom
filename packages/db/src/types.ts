@@ -152,6 +152,16 @@ export type MentionFilters = Partial<{
   to: string;
 }>;
 
+export type ExplorationFilters = MentionFilters &
+  Partial<{
+    batchId: string;
+    sourceQueryId: string;
+    sourceClass: string;
+    platformFamily: string;
+    language: string;
+    country: string;
+  }>;
+
 export type EnrichmentWindow = "24h" | "7d" | "batch";
 export type EnrichmentGroupBy =
   | "platform_family"
@@ -260,6 +270,170 @@ export type DashboardSummary = {
   criticalMentions: number;
   agenciesCovered: number;
 };
+
+export type ExplorationTimeseriesGranularity = "hour" | "day";
+
+export type ExplorationMetaOption = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+export type ExplorationBatchOption = {
+  id: string;
+  label: string;
+  createdAt?: string;
+  from?: string;
+  to?: string;
+  queryId?: string;
+  queryLabel?: string;
+  count: number;
+};
+
+export type ExplorationQueryOption = {
+  id: string;
+  label: string;
+  count: number;
+};
+
+export type ExplorationMeta = {
+  defaults: {
+    agencyId: string;
+    batchId?: string;
+    from?: string;
+    to?: string;
+  };
+  lastIngestedAt?: string;
+  agencies: Agency[];
+  batches: ExplorationBatchOption[];
+  queries: ExplorationQueryOption[];
+  sourceClasses: ExplorationMetaOption[];
+  platformFamilies: ExplorationMetaOption[];
+  languages: ExplorationMetaOption[];
+  countries: ExplorationMetaOption[];
+  sentiments: ExplorationMetaOption[];
+  priorities: ExplorationMetaOption[];
+};
+
+export type ExplorationSummary = {
+  totalMentions: number;
+  negativeMentions: number;
+  criticalMentions: number;
+  avgRiskBaseScore: number;
+  avgEarnedAttentionIndex: number;
+  avgCaptureLatencyMinutes: number;
+  selectedRange: {
+    from?: string;
+    to?: string;
+  };
+  batchId?: string;
+  queryId?: string;
+  lastIngestedAt?: string;
+};
+
+export type ExplorationTimeseriesPoint = {
+  bucket: string;
+  label: string;
+  totalCount: number;
+  negativeCount: number;
+  criticalCount: number;
+  platformCounts: Record<string, number>;
+};
+
+export type ExplorationHeatmapCell = {
+  weekday: string;
+  daypart: string;
+  count: number;
+};
+
+export type ExplorationBreakdownItem = {
+  key: string;
+  label: string;
+  count: number;
+  share: number;
+};
+
+export type ExplorationSentimentByPlatform = {
+  platformFamily: string;
+  positive: number;
+  neutral: number;
+  negative: number;
+  mixed: number;
+  total: number;
+};
+
+export type ExplorationBoxplotStat = {
+  key: string;
+  label: string;
+  count: number;
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+  outliers: number[];
+};
+
+export type ExplorationHistogramBin = {
+  x0: number;
+  x1: number;
+  count: number;
+};
+
+export type ExplorationBreakdowns = {
+  platformFamily: ExplorationBreakdownItem[];
+  country: ExplorationBreakdownItem[];
+  language: ExplorationBreakdownItem[];
+  sentimentByPlatform: ExplorationSentimentByPlatform[];
+  interactionBoxplotByPlatform: ExplorationBoxplotStat[];
+  latencyHistogram: ExplorationHistogramBin[];
+};
+
+export type ExplorationScatterPoint = {
+  id: string;
+  title: string;
+  platformFamily: string;
+  sentiment: MentionSentiment;
+  riskBaseScore: number;
+  earnedAttentionIndex: number;
+  totalInteractionsBase: number;
+  isCritical: boolean;
+};
+
+export type ExplorationEntityNode = {
+  key: string;
+  label: string;
+  value: number;
+};
+
+export type ExplorationMentionRow = {
+  id: string;
+  title: string;
+  bodyPreview: string;
+  url: string;
+  platformFamily: string;
+  sourceClass: string;
+  sentiment: MentionSentiment;
+  priority: CasePriority;
+  authorName: string;
+  occurredAt: string;
+  country: string;
+  earnedAttentionIndex: number;
+  riskBaseScore: number;
+  totalInteractionsBase: number;
+  isCritical: boolean;
+};
+
+export type ExplorationEntities = {
+  topPublicationsOrDomains: ExplorationEntityNode[];
+  mentionTable: ExplorationMentionRow[];
+};
+
+export type ExplorationMentionListOptions = Partial<{
+  limit: number;
+  offset: number;
+  sort: "earned_attention_desc" | "occurred_desc";
+}>;
 
 export type CreateCaseInput = {
   agencyId: string;
@@ -490,6 +664,40 @@ export type Repository = {
   getDashboardSummary(
     session: import("@sac/auth").SessionContext
   ): DashboardSummary | Promise<DashboardSummary>;
+  getExplorationMeta(
+    session: import("@sac/auth").SessionContext,
+    filters?: Pick<ExplorationFilters, "agencyId">
+  ): ExplorationMeta | Promise<ExplorationMeta>;
+  getExplorationSummary(
+    session: import("@sac/auth").SessionContext,
+    filters?: ExplorationFilters
+  ): ExplorationSummary | Promise<ExplorationSummary>;
+  getExplorationTimeseries(
+    session: import("@sac/auth").SessionContext,
+    filters?: ExplorationFilters,
+    granularity?: ExplorationTimeseriesGranularity
+  ): ExplorationTimeseriesPoint[] | Promise<ExplorationTimeseriesPoint[]>;
+  getExplorationHeatmap(
+    session: import("@sac/auth").SessionContext,
+    filters?: ExplorationFilters
+  ): ExplorationHeatmapCell[] | Promise<ExplorationHeatmapCell[]>;
+  getExplorationBreakdowns(
+    session: import("@sac/auth").SessionContext,
+    filters?: ExplorationFilters
+  ): ExplorationBreakdowns | Promise<ExplorationBreakdowns>;
+  getExplorationScatter(
+    session: import("@sac/auth").SessionContext,
+    filters?: ExplorationFilters
+  ): ExplorationScatterPoint[] | Promise<ExplorationScatterPoint[]>;
+  getExplorationEntities(
+    session: import("@sac/auth").SessionContext,
+    filters?: ExplorationFilters
+  ): ExplorationEntities | Promise<ExplorationEntities>;
+  listExplorationMentions(
+    session: import("@sac/auth").SessionContext,
+    filters?: ExplorationFilters,
+    options?: ExplorationMentionListOptions
+  ): ExplorationMentionRow[] | Promise<ExplorationMentionRow[]>;
   listEnrichmentDefinitions():
     | EnrichmentDefinition[]
     | Promise<EnrichmentDefinition[]>;

@@ -2,6 +2,7 @@ import { createMemoryRepository } from "./memory";
 import { createPostgresRepository, isDatabaseConfigured } from "./postgres";
 
 export * from "./memory";
+export * from "./exploration";
 export * from "./enrichments";
 export * from "./postgres";
 export * from "./seed";

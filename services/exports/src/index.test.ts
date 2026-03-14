@@ -24,7 +24,7 @@ describe("exports", () => {
   it("builds pdf reports with unsupported unicode safely", async () => {
     const seed = createSeedData();
     seed.mentions[0] = {
-      ...seed.mentions[0]!,
+      ...seed.mentions[0],
       title: "Alerta con simbolo raro 퐆 y emoji 🚨"
     };
 

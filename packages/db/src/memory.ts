@@ -18,6 +18,18 @@ import {
   buildEnrichmentRollups,
   enrichmentDefinitions
 } from "./enrichments";
+import {
+  buildExplorationBreakdowns,
+  buildExplorationEntities,
+  buildExplorationHeatmap,
+  buildExplorationMentionRows,
+  buildExplorationMeta,
+  buildExplorationScatter,
+  buildExplorationSummary,
+  buildExplorationTimeseries,
+  filterExplorationMentions,
+  resolveExplorationGranularity
+} from "./exploration";
 import type {
   Alert,
   BrandwatchSyncRun,
@@ -31,6 +43,8 @@ import type {
   EnrichmentListOptions,
   EnrichmentRollup,
   EnrichmentRollupFilters,
+  ExplorationFilters,
+  ExplorationMentionListOptions,
   ImportResult,
   MentionFilters,
   NormalizedMention,
@@ -185,6 +199,108 @@ export const createMemoryRepository = (
         }
       ),
       filters
+    );
+
+  const buildScopedExplorationMentions = (
+    session: SessionContext,
+    filters: ExplorationFilters = {}
+  ) =>
+    filterExplorationMentions(
+      buildScopedEnrichedMentions(
+        session,
+        {
+          agencyId: filters.agencyId,
+          source: filters.source,
+          sentiment: filters.sentiment,
+          priority: filters.priority,
+          q: filters.q,
+          from: filters.from,
+          to: filters.to
+        },
+        {
+          includeDisabled: false
+        }
+      ),
+      filters
+    );
+
+  const getExplorationMeta: Repository["getExplorationMeta"] = (
+    session,
+    filters = {}
+  ) =>
+    buildExplorationMeta(
+      {
+        mentions: buildScopedEnrichedMentions(
+          session,
+          {
+            agencyId: filters.agencyId
+          },
+          {
+            includeDisabled: false
+          }
+        ),
+        agencies: state.agencies.filter((agency) =>
+          visibleAgencyIds(session).includes(agency.id)
+        )
+      },
+      filters
+    );
+
+  const getExplorationSummary: Repository["getExplorationSummary"] = (
+    session,
+    filters = {}
+  ) =>
+    buildExplorationSummary(
+      buildScopedExplorationMentions(session, filters),
+      filters
+    );
+
+  const getExplorationTimeseries: Repository["getExplorationTimeseries"] = (
+    session,
+    filters = {},
+    granularity
+  ) => {
+    const mentions = buildScopedExplorationMentions(session, filters);
+    return buildExplorationTimeseries(
+      mentions,
+      granularity ?? resolveExplorationGranularity(mentions, filters)
+    );
+  };
+
+  const getExplorationHeatmap: Repository["getExplorationHeatmap"] = (
+    session,
+    filters = {}
+  ) =>
+    buildExplorationHeatmap(buildScopedExplorationMentions(session, filters));
+
+  const getExplorationBreakdowns: Repository["getExplorationBreakdowns"] = (
+    session,
+    filters = {}
+  ) =>
+    buildExplorationBreakdowns(
+      buildScopedExplorationMentions(session, filters)
+    );
+
+  const getExplorationScatter: Repository["getExplorationScatter"] = (
+    session,
+    filters = {}
+  ) =>
+    buildExplorationScatter(buildScopedExplorationMentions(session, filters));
+
+  const getExplorationEntities: Repository["getExplorationEntities"] = (
+    session,
+    filters = {}
+  ) =>
+    buildExplorationEntities(buildScopedExplorationMentions(session, filters));
+
+  const listExplorationMentions: Repository["listExplorationMentions"] = (
+    session,
+    filters = {},
+    options: ExplorationMentionListOptions = {}
+  ) =>
+    buildExplorationMentionRows(
+      buildScopedExplorationMentions(session, filters),
+      options
     );
 
   const listAlerts = (session: SessionContext, agencyId?: string) =>
@@ -521,6 +637,14 @@ export const createMemoryRepository = (
     state,
     ready: () => Promise.resolve(undefined),
     getDashboardSummary,
+    getExplorationMeta,
+    getExplorationSummary,
+    getExplorationTimeseries,
+    getExplorationHeatmap,
+    getExplorationBreakdowns,
+    getExplorationScatter,
+    getExplorationEntities,
+    listExplorationMentions,
     listEnrichmentDefinitions,
     listMentions,
     listMentionsEnriched,

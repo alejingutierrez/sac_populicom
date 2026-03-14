@@ -12,10 +12,27 @@ const iterations = Number(process.env.PERF_ITERATIONS ?? 36);
 const warmupIterations = Number(process.env.PERF_WARMUP ?? 6);
 
 const targets = [
-  { name: "dashboard_page", path: "/" },
+  { name: "exploration_page", path: "/" },
+  { name: "operations_page", path: "/operacion" },
   { name: "mentions_page", path: "/mentions" },
   { name: "bandeja_page", path: "/bandeja" },
   { name: "dashboard_api", path: "/api/dashboard/summary" },
+  {
+    name: "exploration_summary_api",
+    path: "/api/dashboard/exploration/summary?agencyId=pr-central"
+  },
+  {
+    name: "exploration_timeseries_api",
+    path: "/api/dashboard/exploration/timeseries?agencyId=pr-central"
+  },
+  {
+    name: "exploration_breakdowns_api",
+    path: "/api/dashboard/exploration/breakdowns?agencyId=pr-central"
+  },
+  {
+    name: "exploration_entities_api",
+    path: "/api/dashboard/exploration/entities?agencyId=pr-central"
+  },
   {
     name: "mentions_api",
     path: "/api/mentions?agencyId=pr-central&source=social"

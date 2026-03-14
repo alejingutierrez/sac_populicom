@@ -15,6 +15,18 @@ import {
   enrichmentDefinitions
 } from "./enrichments";
 import {
+  buildExplorationBreakdowns,
+  buildExplorationEntities,
+  buildExplorationHeatmap,
+  buildExplorationMentionRows,
+  buildExplorationMeta,
+  buildExplorationScatter,
+  buildExplorationSummary,
+  buildExplorationTimeseries,
+  filterExplorationMentions,
+  resolveExplorationGranularity
+} from "./exploration";
+import {
   assertCaseTransition,
   createAlertFromMention,
   createId,
@@ -30,6 +42,8 @@ import type {
   EnrichmentDefinition,
   EnrichmentRollup,
   EnrichmentRollupFilters,
+  ExplorationFilters,
+  ExplorationMentionListOptions,
   ImportResult,
   NormalizedMention,
   Repository,
@@ -1337,6 +1351,190 @@ export const createPostgresRepository = (): Repository => {
     );
   };
 
+  const loadExplorationMentions = async (
+    session: SessionContext,
+    filters: ExplorationFilters = {}
+  ) =>
+    filterExplorationMentions(
+      await listMentionsEnriched(
+        session,
+        {
+          agencyId: filters.agencyId,
+          source: filters.source,
+          sentiment: filters.sentiment,
+          priority: filters.priority,
+          q: filters.q,
+          from: filters.from,
+          to: filters.to
+        },
+        {
+          includeDisabled: false
+        }
+      ),
+      filters
+    );
+
+  const getExplorationMeta: Repository["getExplorationMeta"] = async (
+    session,
+    filters = {}
+  ) => {
+    await ensureReady();
+    const pool = getPool();
+    const [agencies, mentions] = await Promise.all([
+      listAgencies(session),
+      listMentionsEnriched(
+        session,
+        {
+          agencyId: filters.agencyId
+        },
+        {
+          includeDisabled: false
+        }
+      )
+    ]);
+    const params: unknown[] = [];
+    const batchClauses: string[] = [];
+    const scopedAgencyIds = visibleAgencyIds(session);
+
+    if (scopedAgencyIds) {
+      params.push(scopedAgencyIds);
+      batchClauses.push(`ib.agency_id = ANY($${params.length}::text[])`);
+    }
+
+    if (filters.agencyId) {
+      params.push(filters.agencyId);
+      batchClauses.push(`ib.agency_id = $${params.length}`);
+    }
+
+    const batchResult = await pool.query<
+      QueryResultRow & {
+        id: string;
+        created_at: Date | string;
+        range_from: Date | string | null;
+        range_to: Date | string | null;
+        query_id: string | null;
+        query_label: string | null;
+        mention_count: string | number;
+      }
+    >(
+      `
+        SELECT
+          ib.id,
+          ib.created_at,
+          MIN(m.occurred_at) AS range_from,
+          MAX(m.occurred_at) AS range_to,
+          COALESCE(sq.external_id, ib.source_query_id) AS query_id,
+          sq.name AS query_label,
+          COUNT(m.id) AS mention_count
+        FROM import_batches ib
+        LEFT JOIN mentions m ON m.import_batch_id = ib.id
+        LEFT JOIN source_queries sq ON sq.id = ib.source_query_id
+        ${batchClauses.length ? `WHERE ${batchClauses.join(" AND ")}` : ""}
+        GROUP BY ib.id, ib.created_at, sq.external_id, ib.source_query_id, sq.name
+        ORDER BY ib.created_at DESC
+      `,
+      params
+    );
+
+    const queryResult = await pool.query<
+      QueryResultRow & {
+        id: string;
+        label: string | null;
+        mention_count: string | number;
+      }
+    >(
+      `
+        SELECT
+          COALESCE(sq.external_id, m.source_query_id) AS id,
+          sq.name AS label,
+          COUNT(m.id) AS mention_count
+        FROM mentions m
+        LEFT JOIN source_queries sq ON sq.id = m.source_query_id
+        ${
+          batchClauses.length
+            ? `WHERE ${batchClauses
+                .map((clause) => clause.replaceAll("ib.", "m."))
+                .join(" AND ")}`
+            : ""
+        }
+        GROUP BY COALESCE(sq.external_id, m.source_query_id), sq.name
+        ORDER BY mention_count DESC, label ASC
+      `,
+      params
+    );
+
+    return buildExplorationMeta(
+      {
+        mentions,
+        agencies,
+        batchDetails: batchResult.rows.map((row) => ({
+          id: row.id,
+          label: row.query_label ?? `Batch ${row.id.slice(0, 8)}`,
+          createdAt: toIsoString(row.created_at),
+          from: row.range_from ? toIsoString(row.range_from) : undefined,
+          to: row.range_to ? toIsoString(row.range_to) : undefined,
+          queryId: row.query_id ?? undefined,
+          queryLabel: row.query_label ?? undefined
+        })),
+        queryDetails: queryResult.rows.map((row) => ({
+          id: row.id,
+          label: row.label ?? row.id
+        }))
+      },
+      filters
+    );
+  };
+
+  const getExplorationSummary: Repository["getExplorationSummary"] = async (
+    session,
+    filters = {}
+  ) =>
+    buildExplorationSummary(
+      await loadExplorationMentions(session, filters),
+      filters
+    );
+
+  const getExplorationTimeseries: Repository["getExplorationTimeseries"] =
+    async (session, filters = {}, granularity) => {
+      const mentions = await loadExplorationMentions(session, filters);
+      return buildExplorationTimeseries(
+        mentions,
+        granularity ?? resolveExplorationGranularity(mentions, filters)
+      );
+    };
+
+  const getExplorationHeatmap: Repository["getExplorationHeatmap"] = async (
+    session,
+    filters = {}
+  ) => buildExplorationHeatmap(await loadExplorationMentions(session, filters));
+
+  const getExplorationBreakdowns: Repository["getExplorationBreakdowns"] =
+    async (session, filters = {}) =>
+      buildExplorationBreakdowns(
+        await loadExplorationMentions(session, filters)
+      );
+
+  const getExplorationScatter: Repository["getExplorationScatter"] = async (
+    session,
+    filters = {}
+  ) => buildExplorationScatter(await loadExplorationMentions(session, filters));
+
+  const getExplorationEntities: Repository["getExplorationEntities"] = async (
+    session,
+    filters = {}
+  ) =>
+    buildExplorationEntities(await loadExplorationMentions(session, filters));
+
+  const listExplorationMentions: Repository["listExplorationMentions"] = async (
+    session,
+    filters = {},
+    options: ExplorationMentionListOptions = {}
+  ) =>
+    buildExplorationMentionRows(
+      await loadExplorationMentions(session, filters),
+      options
+    );
+
   const getDashboardSummary: Repository["getDashboardSummary"] = async (
     session
   ) => {
@@ -2097,6 +2295,14 @@ export const createPostgresRepository = (): Repository => {
   return {
     ready: ensureReady,
     getDashboardSummary,
+    getExplorationMeta,
+    getExplorationSummary,
+    getExplorationTimeseries,
+    getExplorationHeatmap,
+    getExplorationBreakdowns,
+    getExplorationScatter,
+    getExplorationEntities,
+    listExplorationMentions,
     listEnrichmentDefinitions,
     listMentions,
     listMentionsEnriched,
