@@ -4,7 +4,12 @@ import { DataTable, SectionHeading, StatusBadge } from "@sac/ui";
 
 import { DashboardShell } from "@/components/dashboard-shell";
 import { FilterBar } from "@/components/filter-bar";
-import { formatDateTime, getServerRuntime, toMentionFilters, toneFromStatus } from "@/lib/server";
+import {
+  formatDateTime,
+  getServerRuntime,
+  toMentionFilters,
+  toneFromStatus
+} from "@/lib/server";
 
 type MentionPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -13,8 +18,10 @@ type MentionPageProps = {
 const MentionsPage = async ({ searchParams }: MentionPageProps) => {
   const { repository, session } = await getServerRuntime();
   const filters = await toMentionFilters(searchParams);
-  const mentions = repository.listMentions(session, filters);
-  const agencies = repository.listAgencies(session);
+  const [mentions, agencies] = await Promise.all([
+    repository.listMentions(session, filters),
+    repository.listAgencies(session)
+  ]);
 
   return (
     <DashboardShell
@@ -24,7 +31,10 @@ const MentionsPage = async ({ searchParams }: MentionPageProps) => {
       subtitle="Vista consolidada de redes sociales, noticias y web pública."
     >
       <section className="panel">
-        <SectionHeading title="Filtros persistentes" description="Se guardan localmente por vista y agencia activa." />
+        <SectionHeading
+          title="Filtros persistentes"
+          description="Se guardan localmente por vista y agencia activa."
+        />
         <FilterBar
           storageKey="mentions-filters"
           initialValues={{
@@ -41,7 +51,10 @@ const MentionsPage = async ({ searchParams }: MentionPageProps) => {
               name: "agencyId",
               label: "Agencia",
               type: "select",
-              options: agencies.map((agency) => ({ label: agency.name, value: agency.id }))
+              options: agencies.map((agency) => ({
+                label: agency.name,
+                value: agency.id
+              }))
             },
             {
               name: "source",
@@ -85,7 +98,14 @@ const MentionsPage = async ({ searchParams }: MentionPageProps) => {
       <section className="panel">
         <SectionHeading title={`Menciones detectadas (${mentions.length})`} />
         <DataTable
-          headers={["Fuente", "Contenido", "Sentimiento", "Prioridad", "Hora", "Acción"]}
+          headers={[
+            "Fuente",
+            "Contenido",
+            "Sentimiento",
+            "Prioridad",
+            "Hora",
+            "Acción"
+          ]}
           rows={mentions.map((mention) => [
             <div key={`${mention.id}-source`}>
               <strong>{mention.channel}</strong>
@@ -95,8 +115,16 @@ const MentionsPage = async ({ searchParams }: MentionPageProps) => {
               <strong>{mention.title ?? "Mención operativa"}</strong>
               <p>{mention.body}</p>
             </div>,
-            <StatusBadge key={`${mention.id}-sentiment`} label={mention.sentiment} tone={toneFromStatus(mention.priority)} />,
-            <StatusBadge key={`${mention.id}-priority`} label={mention.priority} tone={toneFromStatus(mention.priority)} />,
+            <StatusBadge
+              key={`${mention.id}-sentiment`}
+              label={mention.sentiment}
+              tone={toneFromStatus(mention.priority)}
+            />,
+            <StatusBadge
+              key={`${mention.id}-priority`}
+              label={mention.priority}
+              tone={toneFromStatus(mention.priority)}
+            />,
             formatDateTime(mention.occurredAt),
             <Link
               className="button button--ghost"

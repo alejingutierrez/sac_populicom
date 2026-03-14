@@ -5,9 +5,11 @@ import { getServerRuntime } from "@/lib/server";
 
 const AdministrationPage = async () => {
   const { config, repository, session } = await getServerRuntime();
-  const agencies = repository.listAgencies(session);
-  const users = repository.listUsers(session);
-  const filters = repository.listSavedFilters(session);
+  const [agencies, users, filters] = await Promise.all([
+    repository.listAgencies(session),
+    repository.listUsers(session),
+    repository.listSavedFilters(session)
+  ]);
 
   return (
     <DashboardShell
@@ -18,25 +20,39 @@ const AdministrationPage = async () => {
     >
       <section className="panel-grid">
         <section className="panel">
-          <SectionHeading title="Agencias" description="Scoping lógico para multiagencia." />
+          <SectionHeading
+            title="Agencias"
+            description="Scoping lógico para multiagencia."
+          />
           <DataTable
             headers={["Agencia", "Slug", "Estado"]}
             rows={agencies.map((agency) => [
               agency.name,
               agency.slug,
-              <StatusBadge key={agency.id} label={agency.isActive ? "activa" : "inactiva"} tone={agency.isActive ? "positive" : "warning"} />
+              <StatusBadge
+                key={agency.id}
+                label={agency.isActive ? "activa" : "inactiva"}
+                tone={agency.isActive ? "positive" : "warning"}
+              />
             ])}
           />
         </section>
 
         <section className="panel">
-          <SectionHeading title="Usuarios" description={`Filtros guardados: ${filters.length}`} />
+          <SectionHeading
+            title="Usuarios"
+            description={`Filtros guardados: ${filters.length}`}
+          />
           <DataTable
             headers={["Nombre", "Email", "Rol", "Agencias"]}
             rows={users.map((user) => [
               user.displayName,
               user.email,
-              <StatusBadge key={`${user.id}-role`} label={user.role} tone={user.role === "admin" ? "critical" : "info"} />,
+              <StatusBadge
+                key={`${user.id}-role`}
+                label={user.role}
+                tone={user.role === "admin" ? "critical" : "info"}
+              />,
               user.agencyIds.join(", ")
             ])}
           />
@@ -44,7 +60,10 @@ const AdministrationPage = async () => {
       </section>
 
       <section className="panel">
-        <SectionHeading title="Runtime previsto" description="Defaults listos para AWS comercial en us-east-1." />
+        <SectionHeading
+          title="Runtime previsto"
+          description="Defaults listos para AWS comercial en us-east-1."
+        />
         <div className="definition-grid">
           <div>
             <span>App</span>

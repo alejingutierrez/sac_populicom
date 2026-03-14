@@ -15,9 +15,11 @@
     "db:migrate": "prisma migrate deploy --schema ./prisma/schema.prisma"
   },
   "dependencies": {
-    "@sac/auth": "workspace:*"
+    "@sac/auth": "workspace:*",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@types/pg": "^8.15.6",
     "prisma": "^6.18.0"
   }
 }

@@ -1,6 +1,12 @@
 import { getDemoSession } from "@sac/auth";
 import { getPublicConfig } from "@sac/config";
-import { getRepository, type AlertStatus, type CasePriority, type CaseStatus, type MentionFilters } from "@sac/db";
+import {
+  getRepository,
+  type AlertStatus,
+  type CasePriority,
+  type CaseStatus,
+  type MentionFilters
+} from "@sac/db";
 import { headers } from "next/headers";
 
 type SearchParamInput =
@@ -8,7 +14,8 @@ type SearchParamInput =
   | Record<string, string | string[] | undefined>
   | undefined;
 
-const pickFirst = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value);
+const pickFirst = (value?: string | string[]) =>
+  Array.isArray(value) ? value[0] : value;
 
 export const resolveSearchParams = async (searchParams?: SearchParamInput) => {
   if (!searchParams) {
@@ -18,7 +25,9 @@ export const resolveSearchParams = async (searchParams?: SearchParamInput) => {
   return await searchParams;
 };
 
-export const toMentionFilters = async (searchParams?: SearchParamInput): Promise<MentionFilters> => {
+export const toMentionFilters = async (
+  searchParams?: SearchParamInput
+): Promise<MentionFilters> => {
   const resolved = await resolveSearchParams(searchParams);
 
   return {
@@ -34,10 +43,12 @@ export const toMentionFilters = async (searchParams?: SearchParamInput): Promise
 
 export const getServerRuntime = async () => {
   const requestHeaders = await headers();
+  const repository = getRepository();
+  await repository.ready();
 
   return {
     config: getPublicConfig(),
-    repository: getRepository(),
+    repository,
     session: getDemoSession(requestHeaders)
   };
 };
@@ -49,7 +60,9 @@ export const formatDateTime = (value: string) =>
     timeZone: "America/Puerto_Rico"
   }).format(new Date(value));
 
-export const toneFromStatus = (value: AlertStatus | CaseStatus | CasePriority) => {
+export const toneFromStatus = (
+  value: AlertStatus | CaseStatus | CasePriority
+) => {
   if (value === "critical" || value === "open" || value === "new") {
     return "critical" as const;
   }

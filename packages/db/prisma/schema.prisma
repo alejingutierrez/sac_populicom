@@ -8,62 +8,194 @@ datasource db {
 }
 
 model Agency {
-  id          String       @id
-  name        String
-  slug        String       @unique
-  isActive    Boolean      @default(true)
-  users       UserRole[]
-  mentions    Mention[]
-  alerts      Alert[]
-  cases       Case[]
-  savedFilter SavedFilter[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id            String              @id
+  name          String
+  slug          String              @unique
+  isActive      Boolean             @default(true) @map("is_active")
+  users         UserRole[]
+  mentions      Mention[]
+  alerts        Alert[]
+  cases         Case[]
+  savedFilters  SavedFilter[]
+  auditLogs     AuditLog[]
+  syncRuns      BrandwatchSyncRun[]
+  importBatches ImportBatch[]
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@map("agencies")
 }
 
 model User {
-  id          String       @id
-  email       String       @unique
-  displayName String
-  roles       UserRole[]
-  cases       Case[]       @relation("CaseAssignee")
-  events      CaseEvent[]
-  audits      AuditLog[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id           String        @id
+  email        String        @unique
+  displayName  String        @map("display_name")
+  roles        UserRole[]
+  assignedCases Case[]       @relation("CaseAssignee")
+  createdCases Case[]        @relation("CaseCreator")
+  events       CaseEvent[]
+  audits       AuditLog[]
+  savedFilters SavedFilter[] @relation("SavedFilterOwner")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@map("users")
 }
 
 model UserRole {
-  id       String @id @default(cuid())
-  userId   String
-  agencyId String
+  id       String @id
+  userId   String @map("user_id")
+  agencyId String @map("agency_id")
   role     String
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   agency Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
 
   @@unique([userId, agencyId, role])
+  @@map("user_roles")
 }
 
-model BrandwatchSyncRun {
-  id             String   @id @default(cuid())
-  agencyId       String
-  cursor         String?
-  sourceWindow   String
-  fetchedCount   Int
-  insertedCount  Int
-  duplicateCount Int
-  status         String
-  startedAt      DateTime
-  finishedAt     DateTime
-  createdAt      DateTime @default(now())
+model SourceQuery {
+  id          String        @id
+  externalId  String        @map("external_id")
+  name        String
+  brandName   String        @map("brand_name")
+  reportName  String        @map("report_name")
+  label       String?
+  sourceFrom  DateTime      @map("source_from")
+  sourceTo    DateTime      @map("source_to")
+  mentions    Mention[]
+  importBatches ImportBatch[]
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@unique([externalId, name])
+  @@map("source_queries")
+}
+
+model ImportBatch {
+  id               String          @id
+  agencyId         String          @map("agency_id")
+  sourceQueryId    String          @map("source_query_id")
+  fileName         String          @map("file_name")
+  sheetName        String          @map("sheet_name")
+  checksum         String          @unique
+  s3Key            String          @map("s3_key")
+  rawObjectKey     String          @map("raw_object_key")
+  rowsRead         Int             @default(0) @map("rows_read")
+  rowsInserted     Int             @default(0) @map("rows_inserted")
+  rowsDeduped      Int             @default(0) @map("rows_deduped")
+  mentionsUpserted Int             @default(0) @map("mentions_upserted")
+  metricsInserted  Int             @default(0) @map("metrics_inserted")
+  status           String
+  errorSummary     Json            @default("[]") @map("error_summary")
+  agency           Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  sourceQuery      SourceQuery     @relation(fields: [sourceQueryId], references: [id], onDelete: Cascade)
+  mentions         Mention[]
+  rawRows          MentionRawRow[]
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  @@map("import_batches")
+}
+
+model Author {
+  id               String    @id
+  identityKey      String    @unique @map("identity_key")
+  platform         String
+  sourceAuthorId   String?   @map("source_author_id")
+  name             String?
+  handle           String?
+  fullName         String?   @map("full_name")
+  accountType      String?   @map("account_type")
+  verifiedType     String?   @map("verified_type")
+  avatarUrl        String?   @map("avatar_url")
+  followers        Float?
+  following        Float?
+  posts            Float?
+  rawProfile       Json?     @map("raw_profile")
+  mentions         Mention[]
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("authors")
+}
+
+model Publication {
+  id                   String    @id
+  identityKey          String    @unique @map("identity_key")
+  platform             String
+  sourcePublicationId  String?   @map("source_publication_id")
+  name                 String?
+  domain               String?
+  pageType             String?   @map("page_type")
+  pubType              String?   @map("pub_type")
+  publisherSubtype     String?   @map("publisher_subtype")
+  blogName             String?   @map("blog_name")
+  subreddit            String?
+  subscribers          Float?
+  dailyVisitors        Float?    @map("daily_visitors")
+  totalMonthlyVisitors Float?    @map("total_monthly_visitors")
+  mentions             Mention[]
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@map("publications")
+}
+
+model MentionThread {
+  id              String    @id
+  identityKey     String    @unique @map("identity_key")
+  platform        String
+  sourceThreadId  String?   @map("source_thread_id")
+  parentPostId    String?   @map("parent_post_id")
+  rootPostId      String?   @map("root_post_id")
+  threadUrl       String?   @map("thread_url")
+  threadAuthor    String?   @map("thread_author")
+  threadCreatedAt DateTime? @map("thread_created_at")
+  entryType       String?   @map("entry_type")
+  parentBlogName  String?   @map("parent_blog_name")
+  rootBlogName    String?   @map("root_blog_name")
+  mentions        Mention[]
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("mention_threads")
+}
+
+model Geography {
+  id           String    @id
+  identityKey  String    @unique @map("identity_key")
+  continentCode String?  @map("continent_code")
+  continent    String?
+  countryCode  String?   @map("country_code")
+  country      String?
+  regionCode   String?   @map("region_code")
+  region       String?
+  cityCode     String?   @map("city_code")
+  city         String?
+  locationName String?   @map("location_name")
+  latitude     Float?
+  longitude    Float?
+  mentions     Mention[]
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("geographies")
 }
 
 model Mention {
-  id            String          @id
-  agencyId      String
-  externalId    String
+  id            String             @id
+  agencyId      String             @map("agency_id")
+  sourceQueryId String?            @map("source_query_id")
+  importBatchId String?            @map("import_batch_id")
+  authorId      String?            @map("author_id")
+  publicationId String?            @map("publication_id")
+  threadId      String?            @map("thread_id")
+  geographyId   String?            @map("geography_id")
+  externalId    String             @map("external_id")
   source        String
+  sourceSystem  String             @default("brandwatch_api") @map("source_system")
   channel       String
   title         String?
   body          String
@@ -71,119 +203,194 @@ model Mention {
   language      String
   sentiment     String
   priority      String
-  authorName    String
-  authorHandle  String?
+  authorName    String             @map("author_name")
+  authorHandle  String?            @map("author_handle")
   topics        String[]
   keywords      String[]
-  isCritical    Boolean         @default(false)
-  occurredAt    DateTime
-  receivedAt    DateTime
-  rawObjectKey  String?
+  isCritical    Boolean            @default(false) @map("is_critical")
+  occurredAt    DateTime           @map("occurred_at")
+  receivedAt    DateTime           @map("received_at")
+  rawObjectKey  String?            @map("raw_object_key")
   engagement    Json
-  agency        Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
-  tags          MentionTag[]
-  authors       MentionAuthor[]
+  agency        Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  sourceQuery   SourceQuery?       @relation(fields: [sourceQueryId], references: [id], onDelete: SetNull)
+  importBatch   ImportBatch?       @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  author        Author?            @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  publication   Publication?       @relation(fields: [publicationId], references: [id], onDelete: SetNull)
+  thread        MentionThread?     @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  geography     Geography?         @relation(fields: [geographyId], references: [id], onDelete: SetNull)
+  rawRows       MentionRawRow[]
+  metrics       MentionMetric[]
+  attributes    MentionAttribute[]
   alerts        Alert[]
   cases         Case[]
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
 
-  @@unique([agencyId, externalId, source])
+  @@unique([agencyId, externalId, sourceSystem])
   @@index([agencyId, occurredAt])
+  @@map("mentions")
 }
 
-model MentionTag {
-  id        String   @id @default(cuid())
-  mentionId String
-  label     String
-  mention   Mention  @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+model MentionRawRow {
+  id                  String      @id
+  importBatchId       String      @map("import_batch_id")
+  mentionId           String?     @map("mention_id")
+  rowNumber           Int         @map("row_number")
+  queryId             String      @map("query_id")
+  sourceMentionId     String?     @map("source_mention_id")
+  resourceId          String?     @map("resource_id")
+  canonicalExternalId String      @map("canonical_external_id")
+  url                 String
+  pageType            String?     @map("page_type")
+  contentSourceName   String?     @map("content_source_name")
+  rawPayload          Json        @map("raw_payload")
+  importBatch         ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  mention             Mention?    @relation(fields: [mentionId], references: [id], onDelete: SetNull)
+  createdAt           DateTime    @default(now()) @map("created_at")
+
+  @@unique([importBatchId, rowNumber])
+  @@map("mention_raw_rows")
 }
 
-model MentionAuthor {
-  id           String  @id @default(cuid())
-  mentionId     String
-  displayName   String
-  handle        String?
-  followerCount Int?
-  mention       Mention @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+model MentionMetric {
+  id           String    @id
+  mentionId    String    @map("mention_id")
+  metricName   String    @map("metric_name")
+  metricValue  Float     @map("metric_value")
+  platform     String
+  sourceColumn String    @map("source_column")
+  unit         String?
+  mention      Mention   @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([mentionId])
+  @@map("mention_metrics")
+}
+
+model MentionAttribute {
+  id             String    @id
+  mentionId      String    @map("mention_id")
+  attributeName  String    @map("attribute_name")
+  attributeValue String    @map("attribute_value")
+  valueType      String    @map("value_type")
+  platform       String
+  sourceColumn   String    @map("source_column")
+  mention        Mention   @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([mentionId])
+  @@map("mention_attributes")
 }
 
 model Alert {
   id          String          @id
-  agencyId    String
-  mentionId   String
+  agencyId    String          @map("agency_id")
+  mentionId   String          @map("mention_id")
   title       String
   description String
   severity    String
   status      String
-  createdAt   DateTime
-  updatedAt   DateTime
   agency      Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
   mention     Mention         @relation(fields: [mentionId], references: [id], onDelete: Cascade)
   deliveries  AlertDelivery[]
   cases       Case[]
+  createdAt   DateTime        @map("created_at")
+  updatedAt   DateTime        @map("updated_at")
+
+  @@map("alerts")
 }
 
 model AlertDelivery {
-  id          String   @id @default(cuid())
-  alertId     String
+  id          String    @id
+  alertId     String    @map("alert_id")
   channel     String
   recipient   String
   status      String
-  deliveredAt DateTime?
-  createdAt   DateTime @default(now())
-  alert       Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  deliveredAt DateTime? @map("delivered_at")
+  alert       Alert     @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("alert_deliveries")
 }
 
 model Case {
   id           String      @id
-  agencyId     String
-  mentionId    String?
-  alertId      String?
+  agencyId     String      @map("agency_id")
+  mentionId    String?     @map("mention_id")
+  alertId      String?     @map("alert_id")
   title        String
   summary      String
   status       String
   priority     String
-  assignedToId String?
-  createdById  String
-  createdAt    DateTime
-  updatedAt    DateTime
+  assignedToId String?     @map("assigned_to_id")
+  createdById  String      @map("created_by_id")
   agency       Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
   mention      Mention?    @relation(fields: [mentionId], references: [id], onDelete: SetNull)
   alert        Alert?      @relation(fields: [alertId], references: [id], onDelete: SetNull)
   assignee     User?       @relation("CaseAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  createdBy    User        @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy    User        @relation("CaseCreator", fields: [createdById], references: [id], onDelete: Cascade)
   events       CaseEvent[]
+  createdAt    DateTime    @map("created_at")
+  updatedAt    DateTime    @map("updated_at")
+
+  @@map("cases")
 }
 
 model CaseEvent {
   id          String   @id
-  caseId       String
-  actorId      String
-  type         String
-  description  String
-  createdAt    DateTime
-  parentCase   Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  actor        User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  caseId      String   @map("case_id")
+  actorId     String   @map("actor_id")
+  type        String
+  description String
+  parentCase  Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  actor       User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @map("created_at")
+
+  @@map("case_events")
 }
 
 model SavedFilter {
   id        String   @id
-  agencyId   String
-  ownerId    String
-  scope      String
-  payload    Json
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  agency     Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  agencyId  String   @map("agency_id")
+  ownerId   String   @map("owner_id")
+  scope     String
+  payload   Json
+  agency    Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  owner     User     @relation("SavedFilterOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("saved_filters")
 }
 
 model AuditLog {
-  id         String   @id
-  actorId     String
-  agencyId    String
+  id          String   @id
+  actorId     String   @map("actor_id")
+  agencyId    String   @map("agency_id")
   action      String
-  subjectType String
-  subjectId   String
+  subjectType String   @map("subject_type")
+  subjectId   String   @map("subject_id")
   metadata    Json
-  createdAt   DateTime
   actor       User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  agency      Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @map("created_at")
+
+  @@map("audit_logs")
+}
+
+model BrandwatchSyncRun {
+  id             String   @id
+  agencyId       String   @map("agency_id")
+  sourceWindow   String   @map("source_window")
+  fetchedCount   Int      @map("fetched_count")
+  insertedCount  Int      @map("inserted_count")
+  duplicateCount Int      @map("duplicate_count")
+  status         String
+  startedAt      DateTime @map("started_at")
+  finishedAt     DateTime @map("finished_at")
+  agency         Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("brandwatch_sync_runs")
 }

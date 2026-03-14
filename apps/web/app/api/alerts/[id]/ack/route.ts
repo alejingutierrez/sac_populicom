@@ -11,13 +11,17 @@ export const POST = async (request: Request, context: RouteContext) => {
   const params = await context.params;
   const session = getDemoSession(request.headers);
   const repository = getRepository();
+  await repository.ready();
 
   try {
-    const alert = repository.acknowledgeAlert(session, params.id);
+    const alert = await repository.acknowledgeAlert(session, params.id);
     return NextResponse.json({ data: alert });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to acknowledge alert" },
+      {
+        error:
+          error instanceof Error ? error.message : "Unable to acknowledge alert"
+      },
       { status: 400 }
     );
   }

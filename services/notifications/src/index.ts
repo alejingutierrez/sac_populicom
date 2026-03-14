@@ -1,8 +1,16 @@
+import { getDemoSession } from "@sac/auth";
 import { loadConfig } from "@sac/config";
-import { getRepository, type Alert, type AlertDelivery, type User } from "@sac/db";
+import {
+  getRepository,
+  type Alert,
+  type AlertDelivery,
+  type User
+} from "@sac/db";
 
 export const buildAlertRecipients = (alert: Alert, users: User[]) =>
-  users.filter((user) => user.role !== "lector" && user.agencyIds.includes(alert.agencyId));
+  users.filter(
+    (user) => user.role !== "lector" && user.agencyIds.includes(alert.agencyId)
+  );
 
 export const dispatchAlert = (alert: Alert, users: User[]): AlertDelivery[] => {
   const config = loadConfig();
@@ -29,10 +37,16 @@ export const dispatchAlert = (alert: Alert, users: User[]): AlertDelivery[] => {
   ]);
 };
 
-export const dispatchOpenAlerts = () => {
+export const dispatchOpenAlerts = async () => {
   const repository = getRepository();
-  const users = repository.state.users;
-  const alerts = repository.state.alerts.filter((alert) => alert.status === "open");
+  await repository.ready();
+  const session = getDemoSession();
+  const [users, alerts] = await Promise.all([
+    repository.listUsers(session),
+    repository.listAlerts(session)
+  ]);
 
-  return alerts.flatMap((alert) => dispatchAlert(alert, users));
+  return alerts
+    .filter((alert) => alert.status === "open")
+    .flatMap((alert) => dispatchAlert(alert, users));
 };

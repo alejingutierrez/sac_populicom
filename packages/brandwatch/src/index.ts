@@ -1,4 +1,10 @@
-import type { MentionSentiment, MentionSource, NormalizedMention } from "@sac/db";
+import type {
+  MentionSentiment,
+  MentionSource,
+  NormalizedMention
+} from "@sac/db";
+
+export * from "./export";
 
 export type BrandwatchMentionPayload = {
   id: string;
@@ -35,7 +41,9 @@ export type BrandwatchClient = {
   fetchMentions(params: BrandwatchFetchParams): Promise<BrandwatchFetchResult>;
 };
 
-const normalizeSentiment = (sentiment: BrandwatchMentionPayload["sentiment"]): MentionSentiment => {
+const normalizeSentiment = (
+  sentiment: BrandwatchMentionPayload["sentiment"]
+): MentionSentiment => {
   if (!sentiment || sentiment === "unknown") {
     return "neutral";
   }
@@ -52,6 +60,7 @@ export const normalizeBrandwatchMention = (
   agencyId,
   externalId: payload.id,
   source: payload.source,
+  sourceSystem: "brandwatch_api",
   channel: payload.channel,
   title: payload.headline,
   body: payload.body,
@@ -120,7 +129,9 @@ const mockPayloads: BrandwatchMentionPayload[] = [
 
 export class MockBrandwatchClient implements BrandwatchClient {
   fetchMentions(params: BrandwatchFetchParams): Promise<BrandwatchFetchResult> {
-    const filtered = mockPayloads.filter((item) => !params.sources || params.sources.includes(item.source));
+    const filtered = mockPayloads.filter(
+      (item) => !params.sources || params.sources.includes(item.source)
+    );
 
     return Promise.resolve({
       cursor: params.cursor,

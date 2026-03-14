@@ -6,7 +6,7 @@ import { formatDateTime, getServerRuntime, toneFromStatus } from "@/lib/server";
 
 const AlertsPage = async () => {
   const { repository, session } = await getServerRuntime();
-  const alerts = repository.listAlerts(session);
+  const alerts = await repository.listAlerts(session);
 
   return (
     <DashboardShell
@@ -16,7 +16,9 @@ const AlertsPage = async () => {
       subtitle="Eventos críticos, palabras clave sensibles y picos operativos."
     >
       <section className="panel">
-        <SectionHeading title={`Alertas abiertas y resueltas (${alerts.length})`} />
+        <SectionHeading
+          title={`Alertas abiertas y resueltas (${alerts.length})`}
+        />
         <DataTable
           headers={["Título", "Severidad", "Estado", "Creada", "Acción"]}
           rows={alerts.map((alert) => [
@@ -24,10 +26,22 @@ const AlertsPage = async () => {
               <strong>{alert.title}</strong>
               <p>{alert.description}</p>
             </div>,
-            <StatusBadge key={`${alert.id}-severity`} label={alert.severity} tone={toneFromStatus(alert.severity)} />,
-            <StatusBadge key={`${alert.id}-status`} label={alert.status} tone={toneFromStatus(alert.status)} />,
+            <StatusBadge
+              key={`${alert.id}-severity`}
+              label={alert.severity}
+              tone={toneFromStatus(alert.severity)}
+            />,
+            <StatusBadge
+              key={`${alert.id}-status`}
+              label={alert.status}
+              tone={toneFromStatus(alert.status)}
+            />,
             formatDateTime(alert.createdAt),
-            alert.status === "open" ? <AlertAckButton alertId={alert.id} key={`${alert.id}-ack`} /> : "Registrada"
+            alert.status === "open" ? (
+              <AlertAckButton alertId={alert.id} key={`${alert.id}-ack`} />
+            ) : (
+              "Registrada"
+            )
           ])}
         />
       </section>

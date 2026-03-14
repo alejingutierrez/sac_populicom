@@ -19,6 +19,7 @@
     "source-map-support": "^0.5.21"
   },
   "devDependencies": {
+    "@aws-cdk/cloud-assembly-api": "2.2.0",
     "esbuild": "^0.25.12",
     "tsx": "^4.20.6"
   }

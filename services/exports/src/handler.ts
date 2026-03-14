@@ -9,7 +9,8 @@ type ExportEvent = {
 
 export const handler = async (event: ExportEvent = {}) => {
   const repository = getRepository();
-  const mentions = repository.listMentions(getDemoSession());
+  await repository.ready();
+  const mentions = await repository.listMentions(getDemoSession());
 
   return buildMentionReport(mentions, event.format ?? "csv");
 };

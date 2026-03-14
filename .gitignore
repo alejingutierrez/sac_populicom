@@ -17,5 +17,6 @@ out
 playwright-report
 test-results
 cdk.out
+infra/cdk/cdk-outputs.json
 __pycache__
 *.tsbuildinfo

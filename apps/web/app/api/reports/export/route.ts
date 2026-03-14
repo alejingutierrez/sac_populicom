@@ -11,7 +11,12 @@ export const POST = async (request: Request) => {
   };
   const session = getDemoSession(request.headers);
   const repository = getRepository();
-  const artifact = await buildMentionReport(repository.listMentions(session, payload.filters ?? {}), payload.format);
+  await repository.ready();
+  const mentions = await repository.listMentions(
+    session,
+    payload.filters ?? {}
+  );
+  const artifact = await buildMentionReport(mentions, payload.format);
 
   return new NextResponse(new Uint8Array(artifact.content), {
     headers: {

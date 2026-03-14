@@ -3,7 +3,12 @@ import { DataTable, SectionHeading, StatusBadge } from "@sac/ui";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ExportButtons } from "@/components/export-buttons";
 import { FilterBar } from "@/components/filter-bar";
-import { formatDateTime, getServerRuntime, toMentionFilters, toneFromStatus } from "@/lib/server";
+import {
+  formatDateTime,
+  getServerRuntime,
+  toMentionFilters,
+  toneFromStatus
+} from "@/lib/server";
 
 type ReportsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -12,7 +17,7 @@ type ReportsPageProps = {
 const ReportsPage = async ({ searchParams }: ReportsPageProps) => {
   const { repository, session } = await getServerRuntime();
   const filters = await toMentionFilters(searchParams);
-  const mentions = repository.listMentions(session, filters).slice(0, 20);
+  const mentions = await repository.listMentions(session, filters);
 
   return (
     <DashboardShell
@@ -62,15 +67,24 @@ const ReportsPage = async ({ searchParams }: ReportsPageProps) => {
       </section>
 
       <section className="panel">
-        <SectionHeading title={`Vista previa (${mentions.length})`} description="Los exports usan el mismo conjunto filtrado." />
+        <SectionHeading
+          title={`Vista previa (${Math.min(mentions.length, 20)})`}
+          description="Los exports usan el mismo conjunto filtrado."
+        />
         <DataTable
           headers={["Canal", "Título", "Sentimiento", "Fecha"]}
-          rows={mentions.map((mention) => [
-            mention.channel,
-            mention.title ?? mention.body,
-            <StatusBadge key={`${mention.id}-sentiment`} label={mention.sentiment} tone={toneFromStatus(mention.priority)} />,
-            formatDateTime(mention.occurredAt)
-          ])}
+          rows={mentions
+            .slice(0, 20)
+            .map((mention) => [
+              mention.channel,
+              mention.title ?? mention.body,
+              <StatusBadge
+                key={`${mention.id}-sentiment`}
+                label={mention.sentiment}
+                tone={toneFromStatus(mention.priority)}
+              />,
+              formatDateTime(mention.occurredAt)
+            ])}
         />
       </section>
     </DashboardShell>

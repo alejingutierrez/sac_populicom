@@ -12,6 +12,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.924.0",
+    "@aws-sdk/client-sqs": "^3.924.0",
     "@sac/brandwatch": "workspace:*",
     "@sac/config": "workspace:*",
     "@sac/db": "workspace:*"

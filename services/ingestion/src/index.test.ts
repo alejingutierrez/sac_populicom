@@ -6,7 +6,9 @@ import { syncBrandwatchWindow } from "./index";
 
 describe("ingestion", () => {
   it("ingests mock Brandwatch mentions into the repository", async () => {
-    const beforeCount = getRepository().state.mentions.length;
+    const repository = getRepository();
+    await repository.ready();
+    const beforeCount = repository.state?.mentions.length ?? 0;
 
     const result = await syncBrandwatchWindow({
       agencyId: "pr-central",
@@ -15,6 +17,6 @@ describe("ingestion", () => {
     });
 
     expect(result.insertedCount).toBeGreaterThanOrEqual(1);
-    expect(getRepository().state.mentions.length).toBeGreaterThan(beforeCount);
+    expect(repository.state?.mentions.length ?? 0).toBeGreaterThan(beforeCount);
   });
 });

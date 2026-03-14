@@ -13,6 +13,7 @@ import * as lambdaNodejs from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as s3 from "aws-cdk-lib/aws-s3";
+import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as cdk from "aws-cdk-lib";
@@ -23,11 +24,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 type SacPlatformStackProps = cdk.StackProps & {
   repositoryOwner: string;
   repositoryName: string;
-  githubTokenSecretName: string;
+  githubTokenSecretName?: string;
   alertsFromEmail: string;
   rawBucketName: string;
   exportsBucketName: string;
   defaultAgencyId: string;
+  importsPrefix: string;
+  webBaseUrl: string;
+  amplifyBranchName: string;
+  existingAmplifyAppId?: string;
   samlMetadataUrl?: string;
 };
 
@@ -57,16 +62,28 @@ export class SacPlatformStack extends cdk.Stack {
       ]
     });
 
-    const lambdaSecurityGroup = new ec2.SecurityGroup(this, "LambdaSecurityGroup", {
-      vpc,
-      description: "Outbound access for SAC service Lambdas."
-    });
+    const lambdaSecurityGroup = new ec2.SecurityGroup(
+      this,
+      "LambdaSecurityGroup",
+      {
+        vpc,
+        description: "Outbound access for SAC service Lambdas."
+      }
+    );
 
-    const databaseSecurityGroup = new ec2.SecurityGroup(this, "DatabaseSecurityGroup", {
-      vpc,
-      description: "PostgreSQL access for SAC services."
-    });
-    databaseSecurityGroup.addIngressRule(lambdaSecurityGroup, ec2.Port.tcp(5432), "Allow Lambda access to PostgreSQL");
+    const databaseSecurityGroup = new ec2.SecurityGroup(
+      this,
+      "DatabaseSecurityGroup",
+      {
+        vpc,
+        description: "PostgreSQL access for SAC services."
+      }
+    );
+    databaseSecurityGroup.addIngressRule(
+      lambdaSecurityGroup,
+      ec2.Port.tcp(5432),
+      "Allow Lambda access to PostgreSQL"
+    );
 
     const rawBucket = new s3.Bucket(this, "RawBucket", {
       bucketName: props.rawBucketName,
@@ -99,25 +116,27 @@ export class SacPlatformStack extends cdk.Stack {
       ]
     });
 
-    const brandwatchSecret = new secretsmanager.Secret(this, "BrandwatchSecret", {
-      secretName: "brandwatch/prod/api",
-      generateSecretString: {
-        secretStringTemplate: JSON.stringify({
-          apiBaseUrl: "https://api.brandwatch.com"
-        }),
-        generateStringKey: "token"
-      }
-    });
-
-    const githubAccessToken = secretsmanager.Secret.fromSecretNameV2(
+    const brandwatchSecret = new secretsmanager.Secret(
       this,
-      "GithubAmplifyToken",
-      props.githubTokenSecretName
+      "BrandwatchSecret",
+      {
+        secretName: "brandwatch/prod/api",
+        generateSecretString: {
+          secretStringTemplate: JSON.stringify({
+            apiBaseUrl: "https://api.brandwatch.com"
+          }),
+          generateStringKey: "token"
+        }
+      }
     );
 
-    const databaseCredentials = new rds.DatabaseSecret(this, "DatabaseCredentials", {
-      username: "sac_populicom"
-    });
+    const databaseCredentials = new rds.DatabaseSecret(
+      this,
+      "DatabaseCredentials",
+      {
+        username: "sac_populicom"
+      }
+    );
 
     const database = new rds.DatabaseInstance(this, "SacDatabase", {
       vpc,
@@ -131,13 +150,33 @@ export class SacPlatformStack extends cdk.Stack {
       credentials: rds.Credentials.fromSecret(databaseCredentials),
       allocatedStorage: 100,
       maxAllocatedStorage: 200,
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.MEDIUM),
+      instanceType: ec2.InstanceType.of(
+        ec2.InstanceClass.T4G,
+        ec2.InstanceSize.MEDIUM
+      ),
       backupRetention: cdk.Duration.days(7),
       deletionProtection: true,
       securityGroups: [databaseSecurityGroup],
       removalPolicy: cdk.RemovalPolicy.SNAPSHOT,
       cloudwatchLogsExports: ["postgresql"],
       publiclyAccessible: false
+    });
+
+    const databaseSecret = database.secret ?? databaseCredentials;
+    const databaseUrl = `postgresql://${databaseSecret.secretValueFromJson("username").toString()}:${databaseSecret
+      .secretValueFromJson("password")
+      .toString()}@${database.instanceEndpoint.hostname}:${database.instanceEndpoint.port}/sac_populicom`;
+
+    const importsDeadLetterQueue = new sqs.Queue(this, "ImportsDlq", {
+      retentionPeriod: cdk.Duration.days(14)
+    });
+
+    const importsQueue = new sqs.Queue(this, "ImportsQueue", {
+      visibilityTimeout: cdk.Duration.minutes(15),
+      deadLetterQueue: {
+        maxReceiveCount: 3,
+        queue: importsDeadLetterQueue
+      }
     });
 
     const deadLetterQueue = new sqs.Queue(this, "AlertsDlq", {
@@ -176,8 +215,8 @@ export class SacPlatformStack extends cdk.Stack {
         userPassword: false
       },
       oAuth: {
-        callbackUrls: ["https://main.dxxxxxxxx.amplifyapp.com/api/auth/callback/cognito"],
-        logoutUrls: ["https://main.dxxxxxxxx.amplifyapp.com"]
+        callbackUrls: [`${props.webBaseUrl}/api/auth/callback/cognito`],
+        logoutUrls: [props.webBaseUrl]
       }
     });
 
@@ -191,7 +230,9 @@ export class SacPlatformStack extends cdk.Stack {
     if (props.samlMetadataUrl) {
       new cognito.UserPoolIdentityProviderSaml(this, "InstitutionalSaml", {
         userPool,
-        metadata: cognito.UserPoolIdentityProviderSamlMetadata.url(props.samlMetadataUrl),
+        metadata: cognito.UserPoolIdentityProviderSamlMetadata.url(
+          props.samlMetadataUrl
+        ),
         name: "institutional-saml",
         attributeMapping: {
           email: cognito.ProviderAttribute.other("email"),
@@ -202,80 +243,106 @@ export class SacPlatformStack extends cdk.Stack {
 
     const lambdaEnvironment = {
       APP_ENV: "production",
-      AWS_REGION: props.env?.region ?? cdk.Aws.REGION,
       ALERTS_FROM_EMAIL: props.alertsFromEmail,
       BRANDWATCH_SECRET_ARN: brandwatchSecret.secretArn,
+      BRANDWATCH_IMPORT_PREFIX: props.importsPrefix,
       DATABASE_NAME: "sac_populicom",
-      DATABASE_SECRET_ARN: database.secret?.secretArn ?? databaseCredentials.secretArn,
+      DATABASE_SSL: "true",
+      DATABASE_SECRET_ARN:
+        database.secret?.secretArn ?? databaseCredentials.secretArn,
+      DATABASE_URL: databaseUrl,
       DEFAULT_TIME_ZONE: "America/Puerto_Rico",
       EXPORTS_BUCKET_NAME: exportsBucket.bucketName,
+      NEXT_PUBLIC_BASE_URL: props.webBaseUrl,
       NEXT_PUBLIC_DEFAULT_AGENCY_ID: props.defaultAgencyId,
       RAW_BUCKET_NAME: rawBucket.bucketName
     };
 
-    const ingestionFunction = new lambdaNodejs.NodejsFunction(this, "IngestionFunction", {
-      entry: path.resolve(__dirname, "../../../services/ingestion/src/handler.ts"),
-      handler: "handler",
-      runtime: lambda.Runtime.NODEJS_22_X,
-      timeout: cdk.Duration.minutes(1),
-      memorySize: 512,
-      environment: {
-        ...lambdaEnvironment,
-        ALERTS_QUEUE_URL: alertsQueue.queueUrl
-      },
-      logRetention: logs.RetentionDays.ONE_MONTH,
-      bundling: {
-        sourceMap: true
-      },
-      vpc,
-      securityGroups: [lambdaSecurityGroup],
-      vpcSubnets: {
-        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+    const ingestionFunction = new lambdaNodejs.NodejsFunction(
+      this,
+      "IngestionFunction",
+      {
+        entry: path.resolve(
+          __dirname,
+          "../../../services/ingestion/src/handler.ts"
+        ),
+        handler: "handler",
+        runtime: lambda.Runtime.NODEJS_22_X,
+        timeout: cdk.Duration.minutes(5),
+        memorySize: 1024,
+        environment: {
+          ...lambdaEnvironment,
+          ALERTS_QUEUE_URL: alertsQueue.queueUrl
+        },
+        logRetention: logs.RetentionDays.ONE_MONTH,
+        bundling: {
+          sourceMap: true
+        },
+        vpc,
+        securityGroups: [lambdaSecurityGroup],
+        vpcSubnets: {
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+        }
       }
-    });
+    );
 
-    const notificationsFunction = new lambdaNodejs.NodejsFunction(this, "NotificationsFunction", {
-      entry: path.resolve(__dirname, "../../../services/notifications/src/handler.ts"),
-      handler: "handler",
-      runtime: lambda.Runtime.NODEJS_22_X,
-      timeout: cdk.Duration.minutes(1),
-      memorySize: 512,
-      environment: {
-        ...lambdaEnvironment
-      },
-      logRetention: logs.RetentionDays.ONE_MONTH,
-      bundling: {
-        sourceMap: true
-      },
-      vpc,
-      securityGroups: [lambdaSecurityGroup],
-      vpcSubnets: {
-        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+    const notificationsFunction = new lambdaNodejs.NodejsFunction(
+      this,
+      "NotificationsFunction",
+      {
+        entry: path.resolve(
+          __dirname,
+          "../../../services/notifications/src/handler.ts"
+        ),
+        handler: "handler",
+        runtime: lambda.Runtime.NODEJS_22_X,
+        timeout: cdk.Duration.minutes(1),
+        memorySize: 512,
+        environment: {
+          ...lambdaEnvironment
+        },
+        logRetention: logs.RetentionDays.ONE_MONTH,
+        bundling: {
+          sourceMap: true
+        },
+        vpc,
+        securityGroups: [lambdaSecurityGroup],
+        vpcSubnets: {
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+        }
       }
-    });
+    );
 
-    const exportsFunction = new lambdaNodejs.NodejsFunction(this, "ExportsFunction", {
-      entry: path.resolve(__dirname, "../../../services/exports/src/handler.ts"),
-      handler: "handler",
-      runtime: lambda.Runtime.NODEJS_22_X,
-      timeout: cdk.Duration.minutes(1),
-      memorySize: 512,
-      environment: {
-        ...lambdaEnvironment
-      },
-      logRetention: logs.RetentionDays.ONE_MONTH,
-      bundling: {
-        sourceMap: true
-      },
-      vpc,
-      securityGroups: [lambdaSecurityGroup],
-      vpcSubnets: {
-        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+    const exportsFunction = new lambdaNodejs.NodejsFunction(
+      this,
+      "ExportsFunction",
+      {
+        entry: path.resolve(
+          __dirname,
+          "../../../services/exports/src/handler.ts"
+        ),
+        handler: "handler",
+        runtime: lambda.Runtime.NODEJS_22_X,
+        timeout: cdk.Duration.minutes(1),
+        memorySize: 512,
+        environment: {
+          ...lambdaEnvironment
+        },
+        logRetention: logs.RetentionDays.ONE_MONTH,
+        bundling: {
+          sourceMap: true
+        },
+        vpc,
+        securityGroups: [lambdaSecurityGroup],
+        vpcSubnets: {
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+        }
       }
-    });
+    );
 
     rawBucket.grantReadWrite(ingestionFunction);
     exportsBucket.grantReadWrite(exportsFunction);
+    importsQueue.grantConsumeMessages(ingestionFunction);
     alertsQueue.grantSendMessages(ingestionFunction);
     alertsQueue.grantConsumeMessages(notificationsFunction);
     brandwatchSecret.grantRead(ingestionFunction);
@@ -283,13 +350,29 @@ export class SacPlatformStack extends cdk.Stack {
     database.secret?.grantRead(notificationsFunction);
     database.secret?.grantRead(exportsFunction);
 
-    [ingestionFunction, notificationsFunction, exportsFunction].forEach((fn) => {
-      fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          actions: ["ses:SendEmail", "ses:SendRawEmail"],
-          resources: ["*"]
-        })
-      );
+    [ingestionFunction, notificationsFunction, exportsFunction].forEach(
+      (fn) => {
+        fn.addToRolePolicy(
+          new iam.PolicyStatement({
+            actions: ["ses:SendEmail", "ses:SendRawEmail"],
+            resources: ["*"]
+          })
+        );
+      }
+    );
+
+    rawBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.SqsDestination(importsQueue),
+      {
+        prefix: `${props.importsPrefix}/`,
+        suffix: ".xlsx"
+      }
+    );
+
+    ingestionFunction.addEventSourceMapping("ImportsQueueMapping", {
+      batchSize: 5,
+      eventSourceArn: importsQueue.queueArn
     });
 
     notificationsFunction.addEventSourceMapping("AlertsQueueMapping", {
@@ -308,46 +391,68 @@ export class SacPlatformStack extends cdk.Stack {
       ]
     });
 
-    const amplifyApp = new amplify.CfnApp(this, "SacAmplifyApp", {
-      name: "sac-populicom-web",
-      repository: `https://github.com/${props.repositoryOwner}/${props.repositoryName}`,
-      accessToken: githubAccessToken.secretValue.toString(),
-      buildSpec: [
-        "version: 1",
-        "applications:",
-        "  - appRoot: apps/web",
-        "    frontend:",
-        "      phases:",
-        "        preBuild:",
-        "          commands:",
-        "            - corepack enable",
-        "            - pnpm install --frozen-lockfile",
-        "        build:",
-        "          commands:",
-        "            - pnpm --filter @sac/web build",
-        "      artifacts:",
-        "        baseDirectory: .next",
-        "        files:",
-        "          - '**/*'"
-      ].join("\n"),
-      environmentVariables: [
-        {
-          name: "AWS_REGION",
-          value: props.env?.region ?? cdk.Aws.REGION
-        },
-        {
-          name: "NEXT_PUBLIC_APP_NAME",
-          value: "SAC Populicom"
-        }
-      ]
-    });
+    const amplifyAppId = props.existingAmplifyAppId
+      ? props.existingAmplifyAppId
+      : (() => {
+          if (!props.githubTokenSecretName) {
+            throw new Error(
+              "githubTokenSecretName is required when existingAmplifyAppId is not provided"
+            );
+          }
 
-    new amplify.CfnBranch(this, "MainBranch", {
-      appId: amplifyApp.attrAppId,
-      branchName: "main",
-      stage: "PRODUCTION",
-      enableAutoBuild: false
-    });
+          const githubAccessToken = secretsmanager.Secret.fromSecretNameV2(
+            this,
+            "GithubAmplifyToken",
+            props.githubTokenSecretName
+          );
+
+          const amplifyApp = new amplify.CfnApp(this, "SacAmplifyApp", {
+            name: "sac-populicom-web",
+            repository: `https://github.com/${props.repositoryOwner}/${props.repositoryName}`,
+            accessToken: githubAccessToken.secretValue.toString(),
+            buildSpec: [
+              "version: 1",
+              "applications:",
+              "  - appRoot: apps/web",
+              "    frontend:",
+              "      phases:",
+              "        preBuild:",
+              "          commands:",
+              "            - corepack enable",
+              "            - pnpm install --frozen-lockfile",
+              "        build:",
+              "          commands:",
+              "            - pnpm --filter @sac/web build",
+              "      artifacts:",
+              "        baseDirectory: .next",
+              "        files:",
+              "          - '**/*'"
+            ].join("\n"),
+            environmentVariables: [
+              {
+                name: "AWS_REGION",
+                value: props.env?.region ?? cdk.Aws.REGION
+              },
+              {
+                name: "NEXT_PUBLIC_APP_NAME",
+                value: "SAC Populicom"
+              },
+              {
+                name: "NEXT_PUBLIC_BASE_URL",
+                value: props.webBaseUrl
+              }
+            ]
+          });
+
+          new amplify.CfnBranch(this, "MainBranch", {
+            appId: amplifyApp.attrAppId,
+            branchName: props.amplifyBranchName,
+            stage: "PRODUCTION",
+            enableAutoBuild: false
+          });
+
+          return String(amplifyApp.attrAppId);
+        })();
 
     new cloudwatch.Alarm(this, "IngestionErrorsAlarm", {
       metric: ingestionFunction.metricErrors(),
@@ -361,6 +466,13 @@ export class SacPlatformStack extends cdk.Stack {
       threshold: 25,
       evaluationPeriods: 1,
       alarmDescription: "Cola de alertas con backlog operativo."
+    });
+
+    new cloudwatch.Alarm(this, "ImportsQueueDepthAlarm", {
+      metric: importsQueue.metricApproximateNumberOfMessagesVisible(),
+      threshold: 5,
+      evaluationPeriods: 1,
+      alarmDescription: "Cola de imports Brandwatch con backlog operativo."
     });
 
     new cdk.CfnOutput(this, "UserPoolId", {
@@ -379,12 +491,16 @@ export class SacPlatformStack extends cdk.Stack {
       value: exportsBucket.bucketName
     });
 
+    new cdk.CfnOutput(this, "BrandwatchImportPrefix", {
+      value: `${props.importsPrefix}/`
+    });
+
     new cdk.CfnOutput(this, "DatabaseSecretArn", {
       value: database.secret?.secretArn ?? databaseCredentials.secretArn
     });
 
     new cdk.CfnOutput(this, "AmplifyAppId", {
-      value: amplifyApp.attrAppId
+      value: amplifyAppId
     });
   }
 }

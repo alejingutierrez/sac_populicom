@@ -20,12 +20,18 @@
     "format:write": "prettier --write .",
     "prepare": "husky",
     "db:generate": "pnpm --filter @sac/db db:generate",
-    "db:migrate": "pnpm --filter @sac/db db:migrate"
+    "db:migrate": "pnpm --filter @sac/db db:migrate",
+    "brandwatch:profile": "tsx ./scripts/profile-brandwatch-export.ts",
+    "brandwatch:import": "tsx ./scripts/import-brandwatch-export.ts",
+    "brandwatch:invoke-import": "tsx ./scripts/invoke-brandwatch-import.ts",
+    "stack:invoke-lambda": "tsx ./scripts/invoke-stack-lambda.ts"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml,css}": "prettier --write"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudformation": "^3.925.0",
+    "@aws-sdk/client-lambda": "^3.925.0",
     "@commitlint/cli": "^20.1.0",
     "@commitlint/config-conventional": "^20.0.0",
     "@eslint/js": "^9.39.1",

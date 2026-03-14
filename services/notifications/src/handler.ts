@@ -1,3 +1,3 @@
 import { dispatchOpenAlerts } from "./index";
 
-export const handler = () => dispatchOpenAlerts();
+export const handler = async () => dispatchOpenAlerts();

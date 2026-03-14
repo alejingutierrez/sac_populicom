@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@sac/db": "workspace:*"
+    "@sac/db": "workspace:*",
+    "xlsx": "^0.18.5"
   }
 }
