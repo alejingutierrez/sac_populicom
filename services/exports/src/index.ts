@@ -11,10 +11,27 @@ export type ExportArtifact = {
 };
 
 const csvEscape = (value: string) => `"${value.replaceAll('"', '""')}"`;
+const sanitizePdfText = (value: string) =>
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, "?");
 
-export const buildMentionReport = async (mentions: NormalizedMention[], format: ExportFormat): Promise<ExportArtifact> => {
+export const buildMentionReport = async (
+  mentions: NormalizedMention[],
+  format: ExportFormat
+): Promise<ExportArtifact> => {
   if (format === "csv") {
-    const headers = ["agencyId", "source", "channel", "sentiment", "priority", "title", "body", "occurredAt"];
+    const headers = [
+      "agencyId",
+      "source",
+      "channel",
+      "sentiment",
+      "priority",
+      "title",
+      "body",
+      "occurredAt"
+    ];
     const rows = mentions.map((mention) =>
       [
         mention.agencyId,
@@ -50,17 +67,17 @@ export const buildMentionReport = async (mentions: NormalizedMention[], format: 
   });
 
   mentions.slice(0, 8).forEach((mention, index) => {
-    page.drawText(
-      `${index + 1}. [${mention.source}] ${mention.title ?? mention.body.slice(0, 72)} (${mention.sentiment} / ${mention.priority})`,
-      {
-        x: 48,
-        y: 504 - index * 48,
-        size: 11,
-        font,
-        color: rgb(0.12, 0.16, 0.24),
-        maxWidth: 740
-      }
+    const line = sanitizePdfText(
+      `${index + 1}. [${mention.source}] ${mention.title ?? mention.body.slice(0, 72)} (${mention.sentiment} / ${mention.priority})`
     );
+    page.drawText(line, {
+      x: 48,
+      y: 504 - index * 48,
+      size: 11,
+      font,
+      color: rgb(0.12, 0.16, 0.24),
+      maxWidth: 740
+    });
   });
 
   return {
