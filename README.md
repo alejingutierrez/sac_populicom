@@ -24,6 +24,24 @@ Base técnica inicial para una consola de monitoreo SAC orientada a operación g
   - batch persistido: `batch-7bd586d1-66fc-4a9c-a1ff-ae7a2fc6369c`
   - validación posterior: reimportar el mismo archivo responde como duplicado por `checksum`
 
+## Capa de enriquecimientos
+
+- El sistema expone `100` derivadas calculadas sobre menciones canónicas sin añadir `100` columnas físicas a `mentions`.
+- La fuente de verdad vive en el catálogo persistido `enrichment_definitions` y en las vistas SQL:
+  - `mention_enriched_v1`
+  - `mention_rollup_24h_v1`
+  - `mention_rollup_7d_v1`
+  - `mention_rollup_batch_v1`
+- La documentación generada del catálogo y fórmulas vive en:
+  - [`docs/enrichments/catalog.md`](/Volumes/MyApps/sac_populicom/docs/enrichments/catalog.md)
+  - [`docs/enrichments/formulas.md`](/Volumes/MyApps/sac_populicom/docs/enrichments/formulas.md)
+  - [`docs/enrichments/api.md`](/Volumes/MyApps/sac_populicom/docs/enrichments/api.md)
+- Regeneración documental:
+
+```bash
+pnpm enrichments:docs
+```
+
 ## Estructura
 
 - `apps/web`: consola operativa y BFF
@@ -45,7 +63,7 @@ Base técnica inicial para una consola de monitoreo SAC orientada a operación g
 - Capa de importación/analítica:
   - `source_queries`, `import_batches`, `mention_raw_rows`
   - `authors`, `publications`, `mention_threads`, `geographies`
-  - `mention_metrics`, `mention_attributes`, `brandwatch_sync_runs`
+  - `mention_metrics`, `mention_attributes`, `enrichment_definitions`, `brandwatch_sync_runs`
 
 ## Primer arranque
 
@@ -69,6 +87,7 @@ Usa `.env.example` como referencia. Las credenciales reales deben residir en AWS
 - `pnpm test:e2e`
 - `pnpm db:generate`
 - `pnpm db:migrate`
+- `pnpm enrichments:docs`
 - `pnpm brandwatch:profile <xlsx-path>`
 - `pnpm brandwatch:import <xlsx-path> --agency pr-central`
 - `pnpm brandwatch:invoke-import --bucket <bucket> --key <s3-key>`
@@ -91,6 +110,10 @@ DATABASE_URL=postgresql://... pnpm brandwatch:import "/ruta/al/export.xlsx" --ag
 - Ingesta productiva:
   - subir el XLSX a `s3://$RAW_BUCKET_NAME/imports/brandwatch/{agency_id}/YYYY/MM/DD/archivo.xlsx`
   - `S3 -> SQS -> Lambda -> PostgreSQL`
+- Enriquecimientos automáticos:
+  - cada arranque PostgreSQL sincroniza `enrichment_definitions`
+  - cada import/upsert ejecuta `ensureEnrichmentArtifacts()`
+  - las vistas SQL reflejan datos nuevos sin `refresh` manual
 - Verificación remota sin `aws` CLI:
   - invocar la Lambda de ingesta con `pnpm brandwatch:invoke-import ...`
   - invocar la Lambda de exports con `pnpm stack:invoke-lambda --prefix ExportsFunction ...`

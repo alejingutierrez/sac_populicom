@@ -16,7 +16,18 @@ const targets = [
   { name: "mentions_page", path: "/mentions" },
   { name: "bandeja_page", path: "/bandeja" },
   { name: "dashboard_api", path: "/api/dashboard/summary" },
-  { name: "mentions_api", path: "/api/mentions?agencyId=pr-central&source=social" }
+  {
+    name: "mentions_api",
+    path: "/api/mentions?agencyId=pr-central&source=social"
+  },
+  {
+    name: "mentions_enriched_api",
+    path: "/api/mentions/enriched?agencyId=pr-central&source=social&limit=50"
+  },
+  {
+    name: "enrichment_rollups_api",
+    path: "/api/enrichments/rollups?window=24h&groupBy=platform_family&agencyId=pr-central"
+  }
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -48,7 +59,9 @@ const waitForServer = async (server) => {
 
   while (Date.now() < deadline) {
     if (server.exitCode !== null) {
-      throw new Error(`Web server exited early.\nSTDOUT:\n${bufferedStdout}\nSTDERR:\n${bufferedStderr}`);
+      throw new Error(
+        `Web server exited early.\nSTDOUT:\n${bufferedStdout}\nSTDERR:\n${bufferedStderr}`
+      );
     }
 
     try {
@@ -61,7 +74,9 @@ const waitForServer = async (server) => {
     await sleep(500);
   }
 
-  throw new Error(`Timed out waiting for local web server.\nSTDOUT:\n${bufferedStdout}\nSTDERR:\n${bufferedStderr}`);
+  throw new Error(
+    `Timed out waiting for local web server.\nSTDOUT:\n${bufferedStdout}\nSTDERR:\n${bufferedStderr}`
+  );
 };
 
 const timedFetch = async (url) => {
@@ -106,7 +121,9 @@ const runTarget = async ({ name, path: targetPath }) => {
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   const totalDurationMs = performance.now() - totalStarted;
-  const successfulRequests = statuses.filter((status) => status >= 200 && status < 400).length;
+  const successfulRequests = statuses.filter(
+    (status) => status >= 200 && status < 400
+  ).length;
 
   return {
     name,
@@ -114,11 +131,17 @@ const runTarget = async ({ name, path: targetPath }) => {
     iterations,
     concurrency,
     totalDurationMs,
-    requestsPerSecond: Number((iterations / (totalDurationMs / 1000)).toFixed(2)),
+    requestsPerSecond: Number(
+      (iterations / (totalDurationMs / 1000)).toFixed(2)
+    ),
     successRate: Number(((successfulRequests / iterations) * 100).toFixed(2)),
     minMs: Number(Math.min(...latencies).toFixed(2)),
     maxMs: Number(Math.max(...latencies).toFixed(2)),
-    avgMs: Number((latencies.reduce((sum, value) => sum + value, 0) / latencies.length).toFixed(2)),
+    avgMs: Number(
+      (
+        latencies.reduce((sum, value) => sum + value, 0) / latencies.length
+      ).toFixed(2)
+    ),
     p50Ms: Number(percentile(latencies, 0.5).toFixed(2)),
     p95Ms: Number(percentile(latencies, 0.95).toFixed(2))
   };
@@ -148,14 +171,26 @@ const renderMarkdown = (results) => {
 
 fs.mkdirSync(reportDir, { recursive: true });
 
-const server = spawn("pnpm", ["--filter", "@sac/web", "start", "--hostname", "127.0.0.1", "--port", String(port)], {
-  cwd: rootDir,
-  env: {
-    ...process.env,
-    PORT: String(port)
-  },
-  stdio: ["ignore", "pipe", "pipe"]
-});
+const server = spawn(
+  "pnpm",
+  [
+    "--filter",
+    "@sac/web",
+    "start",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    String(port)
+  ],
+  {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      PORT: String(port)
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  }
+);
 
 try {
   await waitForServer(server);
@@ -172,8 +207,22 @@ try {
   const latestMdPath = path.join(reportDir, "latest.md");
   const markdown = renderMarkdown(results);
 
-  fs.writeFileSync(jsonPath, JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, results }, null, 2));
-  fs.writeFileSync(latestJsonPath, JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, results }, null, 2));
+  fs.writeFileSync(
+    jsonPath,
+    JSON.stringify(
+      { generatedAt: new Date().toISOString(), baseUrl, results },
+      null,
+      2
+    )
+  );
+  fs.writeFileSync(
+    latestJsonPath,
+    JSON.stringify(
+      { generatedAt: new Date().toISOString(), baseUrl, results },
+      null,
+      2
+    )
+  );
   fs.writeFileSync(latestMdPath, `${markdown}\n`);
 
   console.log(markdown);

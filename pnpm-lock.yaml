@@ -152,6 +152,9 @@ importers:
 
   packages/db:
     dependencies:
+      "@prisma/client":
+        specifier: 6.19.2
+        version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
       "@sac/auth":
         specifier: workspace:*
         version: link:../auth
@@ -1761,6 +1764,21 @@ packages:
       }
     engines: { node: ">=18" }
     hasBin: true
+
+  "@prisma/client@6.19.2":
+    resolution:
+      {
+        integrity: sha512-gR2EMvfK/aTxsuooaDA32D8v+us/8AAet+C3J1cc04SW35FPdZYgLF+iN4NDLUgAaUGTKdAB0CYenu1TAgGdMg==
+      }
+    engines: { node: ">=18.18" }
+    peerDependencies:
+      prisma: "*"
+      typescript: ">=5.1.0"
+    peerDependenciesMeta:
+      prisma:
+        optional: true
+      typescript:
+        optional: true
 
   "@prisma/config@6.19.2":
     resolution:
@@ -6149,6 +6167,11 @@ snapshots:
   "@playwright/test@1.58.2":
     dependencies:
       playwright: 1.58.2
+
+  "@prisma/client@6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)":
+    optionalDependencies:
+      prisma: 6.19.2(typescript@5.9.3)
+      typescript: 5.9.3
 
   "@prisma/config@6.19.2":
     dependencies:

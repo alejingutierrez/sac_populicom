@@ -152,6 +152,107 @@ export type MentionFilters = Partial<{
   to: string;
 }>;
 
+export type EnrichmentWindow = "24h" | "7d" | "batch";
+export type EnrichmentGroupBy =
+  | "platform_family"
+  | "source_class"
+  | "sentiment"
+  | "language"
+  | "country"
+  | "import_batch_id"
+  | "source_query_id";
+export type EnrichmentCategory =
+  | "identity_trace"
+  | "time_freshness"
+  | "geo"
+  | "content"
+  | "sentiment_risk"
+  | "engagement"
+  | "platform"
+  | "authority"
+  | "conversation"
+  | "semantic";
+export type EnrichmentGrain =
+  | "mention"
+  | "thread"
+  | "author_day"
+  | "domain_day"
+  | "query_platform_hour"
+  | "rollup";
+export type EnrichmentValueType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "bucket"
+  | "key"
+  | "json";
+export type EnrichmentSourceCoverage =
+  | "all_sources"
+  | "brandwatch_export_preferred"
+  | "brandwatch_export_only"
+  | "thread_context_optional"
+  | "aggregate";
+export type EnrichmentNullPolicy =
+  | "null_if_missing"
+  | "fallback_to_canonical"
+  | "fallback_to_zero"
+  | "derived_from_available_inputs";
+export type EnrichmentValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Record<string, string | number | boolean | null>;
+
+export type EnrichmentDefinition = {
+  code: string;
+  slug: string;
+  label: string;
+  category: EnrichmentCategory;
+  grain: EnrichmentGrain;
+  valueType: EnrichmentValueType;
+  isEnabled: boolean;
+  dependsOn: string[];
+  sourceCoverage: EnrichmentSourceCoverage;
+  nullPolicy: EnrichmentNullPolicy;
+  description: string;
+};
+
+export type EnrichmentMeta = {
+  batchId?: string;
+  queryId?: string;
+  windowKeys: Partial<Record<EnrichmentWindow, string>>;
+};
+
+export type EnrichedMention = NormalizedMention & {
+  enrichments: Record<string, EnrichmentValue>;
+  enrichmentMeta?: EnrichmentMeta;
+};
+
+export type EnrichmentListOptions = Partial<{
+  includeDisabled: boolean;
+  limit: number;
+  offset: number;
+}>;
+
+export type EnrichmentRollup = {
+  agencyId: string;
+  batchId?: string;
+  groupBy: EnrichmentGroupBy;
+  groupKey: string;
+  queryId?: string;
+  values: Record<string, EnrichmentValue>;
+  window: EnrichmentWindow;
+};
+
+export type EnrichmentRollupFilters = {
+  agencyId?: string;
+  batchId?: string;
+  groupBy: EnrichmentGroupBy;
+  includeDisabled?: boolean;
+  window: EnrichmentWindow;
+};
+
 export type DashboardSummary = {
   mentionsLast24h: number;
   openAlerts: number;
@@ -389,10 +490,27 @@ export type Repository = {
   getDashboardSummary(
     session: import("@sac/auth").SessionContext
   ): DashboardSummary | Promise<DashboardSummary>;
+  listEnrichmentDefinitions():
+    | EnrichmentDefinition[]
+    | Promise<EnrichmentDefinition[]>;
   listMentions(
     session: import("@sac/auth").SessionContext,
     filters?: MentionFilters
   ): NormalizedMention[] | Promise<NormalizedMention[]>;
+  listMentionsEnriched(
+    session: import("@sac/auth").SessionContext,
+    filters?: MentionFilters,
+    options?: EnrichmentListOptions
+  ): EnrichedMention[] | Promise<EnrichedMention[]>;
+  getMentionEnrichments(
+    session: import("@sac/auth").SessionContext,
+    mentionId: string,
+    options?: Pick<EnrichmentListOptions, "includeDisabled">
+  ): EnrichedMention | Promise<EnrichedMention>;
+  listEnrichmentRollups(
+    session: import("@sac/auth").SessionContext,
+    filters: EnrichmentRollupFilters
+  ): EnrichmentRollup[] | Promise<EnrichmentRollup[]>;
   listAlerts(
     session: import("@sac/auth").SessionContext,
     agencyId?: string

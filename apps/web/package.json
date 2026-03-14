@@ -10,7 +10,7 @@
     "start": "next start",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run ./lib/server.test.ts --passWithNoTests",
-    "test:e2e": "playwright test"
+    "test:e2e": "pnpm build && playwright test"
   },
   "dependencies": {
     "@sac/auth": "workspace:*",

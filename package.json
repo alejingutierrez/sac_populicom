@@ -25,6 +25,7 @@
     "amplify:start-job": "tsx ./scripts/amplify-start-job.ts",
     "brandwatch:profile": "tsx ./scripts/profile-brandwatch-export.ts",
     "brandwatch:import": "tsx ./scripts/import-brandwatch-export.ts",
+    "enrichments:docs": "tsx ./scripts/generate-enrichment-docs.ts",
     "brandwatch:invoke-import": "tsx ./scripts/invoke-brandwatch-import.ts",
     "stack:invoke-lambda": "tsx ./scripts/invoke-stack-lambda.ts"
   },

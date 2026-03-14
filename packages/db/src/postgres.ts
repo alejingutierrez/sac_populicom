@@ -8,6 +8,13 @@ import {
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 
 import {
+  buildMentionEnrichedViewSql,
+  buildRollup24hViewSql,
+  buildRollup7dViewSql,
+  buildRollupBatchViewSql,
+  enrichmentDefinitions
+} from "./enrichments";
+import {
   assertCaseTransition,
   createAlertFromMention,
   createId,
@@ -19,6 +26,10 @@ import type {
   Alert,
   BrandwatchWorkbookImportInput,
   Case,
+  EnrichedMention,
+  EnrichmentDefinition,
+  EnrichmentRollup,
+  EnrichmentRollupFilters,
   ImportResult,
   NormalizedMention,
   Repository,
@@ -193,6 +204,12 @@ CREATE TABLE IF NOT EXISTS mentions (
 );
 
 CREATE INDEX IF NOT EXISTS mentions_agency_occurred_at_idx ON mentions (agency_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS mentions_import_batch_idx ON mentions (import_batch_id);
+CREATE INDEX IF NOT EXISTS mentions_source_query_idx ON mentions (source_query_id);
+CREATE INDEX IF NOT EXISTS mentions_author_idx ON mentions (author_id);
+CREATE INDEX IF NOT EXISTS mentions_publication_idx ON mentions (publication_id);
+CREATE INDEX IF NOT EXISTS mentions_thread_idx ON mentions (thread_id);
+CREATE INDEX IF NOT EXISTS mentions_external_idx ON mentions (external_id);
 
 CREATE TABLE IF NOT EXISTS mention_raw_rows (
   id TEXT PRIMARY KEY,
@@ -210,6 +227,9 @@ CREATE TABLE IF NOT EXISTS mention_raw_rows (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (import_batch_id, row_number)
 );
+
+CREATE INDEX IF NOT EXISTS mention_raw_rows_mention_created_idx ON mention_raw_rows (mention_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS mention_raw_rows_query_idx ON mention_raw_rows (query_id);
 
 CREATE TABLE IF NOT EXISTS mention_metrics (
   id TEXT PRIMARY KEY,
@@ -236,6 +256,22 @@ CREATE TABLE IF NOT EXISTS mention_attributes (
 );
 
 CREATE INDEX IF NOT EXISTS mention_attributes_mention_idx ON mention_attributes (mention_id);
+
+CREATE TABLE IF NOT EXISTS enrichment_definitions (
+  code TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  category TEXT NOT NULL,
+  grain TEXT NOT NULL,
+  value_type TEXT NOT NULL,
+  is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  depends_on JSONB NOT NULL,
+  source_coverage TEXT NOT NULL,
+  null_policy TEXT NOT NULL,
+  description TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS alerts (
   id TEXT PRIMARY KEY,
@@ -432,6 +468,49 @@ const seedOperationalData = async (client: PoolClient) => {
   }
 };
 
+const syncEnrichmentDefinitions = async (client: PoolClient) => {
+  for (const definition of enrichmentDefinitions) {
+    await client.query(
+      `
+        INSERT INTO enrichment_definitions (code, slug, label, category, grain, value_type, is_enabled, depends_on, source_coverage, null_policy, description, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,NOW())
+        ON CONFLICT (code) DO UPDATE
+        SET slug = EXCLUDED.slug,
+            label = EXCLUDED.label,
+            category = EXCLUDED.category,
+            grain = EXCLUDED.grain,
+            value_type = EXCLUDED.value_type,
+            depends_on = EXCLUDED.depends_on,
+            source_coverage = EXCLUDED.source_coverage,
+            null_policy = EXCLUDED.null_policy,
+            description = EXCLUDED.description,
+            updated_at = NOW()
+      `,
+      [
+        definition.code,
+        definition.slug,
+        definition.label,
+        definition.category,
+        definition.grain,
+        definition.valueType,
+        definition.isEnabled,
+        JSON.stringify(definition.dependsOn),
+        definition.sourceCoverage,
+        definition.nullPolicy,
+        definition.description
+      ]
+    );
+  }
+};
+
+const ensureEnrichmentArtifacts = async (client: PoolClient) => {
+  await syncEnrichmentDefinitions(client);
+  await client.query(buildMentionEnrichedViewSql());
+  await client.query(buildRollup24hViewSql());
+  await client.query(buildRollup7dViewSql());
+  await client.query(buildRollupBatchViewSql());
+};
+
 const ensureReady = async () => {
   if (!holder.__sacPgReady) {
     holder.__sacPgReady = (async () => {
@@ -440,6 +519,7 @@ const ensureReady = async () => {
       try {
         await client.query(schemaSql);
         await seedOperationalData(client);
+        await ensureEnrichmentArtifacts(client);
       } finally {
         client.release();
       }
@@ -700,6 +780,36 @@ type DashboardSummaryRow = QueryResultRow & {
   agencies_covered: string | number | null;
 };
 
+type EnrichmentDefinitionRow = QueryResultRow & {
+  code: string;
+  slug: string;
+  label: string;
+  category: EnrichmentDefinition["category"];
+  grain: EnrichmentDefinition["grain"];
+  value_type: EnrichmentDefinition["valueType"];
+  is_enabled: boolean;
+  depends_on: string[];
+  source_coverage: EnrichmentDefinition["sourceCoverage"];
+  null_policy: EnrichmentDefinition["nullPolicy"];
+  description: string;
+};
+
+type MentionEnrichedRow = MentionRow & {
+  import_batch_id: string | null;
+  source_query_id: string | null;
+  enrichments: Record<string, unknown> | null;
+  enrichment_meta: Record<string, unknown> | null;
+};
+
+type RollupRow = QueryResultRow & {
+  agency_id: string;
+  batch_id: string | null;
+  query_id: string | null;
+  group_by: EnrichmentRollup["groupBy"];
+  group_key: string;
+  values: Record<string, unknown>;
+};
+
 const roleWeight = (role: User["role"] | null | undefined) => {
   switch (role) {
     case "admin":
@@ -711,7 +821,58 @@ const roleWeight = (role: User["role"] | null | undefined) => {
   }
 };
 
+const mapEnrichmentDefinition = (
+  row: EnrichmentDefinitionRow
+): EnrichmentDefinition => ({
+  code: row.code,
+  slug: row.slug,
+  label: row.label,
+  category: row.category,
+  grain: row.grain,
+  valueType: row.value_type,
+  isEnabled: row.is_enabled,
+  dependsOn: row.depends_on,
+  sourceCoverage: row.source_coverage,
+  nullPolicy: row.null_policy,
+  description: row.description
+});
+
+const mapEnrichedMention = (row: MentionEnrichedRow): EnrichedMention => ({
+  ...mapMention(row),
+  enrichments: (row.enrichments ?? {}) as EnrichedMention["enrichments"],
+  enrichmentMeta: (row.enrichment_meta ??
+    undefined) as EnrichedMention["enrichmentMeta"]
+});
+
+const mapRollup = (
+  row: RollupRow,
+  window: EnrichmentRollupFilters["window"]
+): EnrichmentRollup => ({
+  agencyId: row.agency_id,
+  batchId: row.batch_id ?? undefined,
+  queryId: row.query_id ?? undefined,
+  groupBy: row.group_by,
+  groupKey: row.group_key,
+  values: row.values as EnrichmentRollup["values"],
+  window
+});
+
 export const createPostgresRepository = (): Repository => {
+  const listEnrichmentDefinitions: Repository["listEnrichmentDefinitions"] =
+    async () => {
+      await ensureReady();
+      const pool = getPool();
+      const result = await pool.query<EnrichmentDefinitionRow>(
+        `
+          SELECT code, slug, label, category, grain, value_type, is_enabled, depends_on, source_coverage, null_policy, description
+          FROM enrichment_definitions
+          ORDER BY code ASC
+        `
+      );
+
+      return result.rows.map(mapEnrichmentDefinition);
+    };
+
   const listMentions: Repository["listMentions"] = async (
     session,
     filters = {}
@@ -769,6 +930,193 @@ export const createPostgresRepository = (): Repository => {
     );
 
     return result.rows.map(mapMention);
+  };
+
+  const listMentionsEnriched: Repository["listMentionsEnriched"] = async (
+    session,
+    filters = {},
+    options = {}
+  ) => {
+    await ensureReady();
+    const pool = getPool();
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    const scopedAgencyIds = visibleAgencyIds(session);
+
+    if (scopedAgencyIds) {
+      params.push(scopedAgencyIds);
+      clauses.push(`agency_id = ANY($${params.length}::text[])`);
+    }
+
+    if (filters.agencyId) {
+      params.push(filters.agencyId);
+      clauses.push(`agency_id = $${params.length}`);
+    }
+    if (filters.source) {
+      params.push(filters.source);
+      clauses.push(`source = $${params.length}`);
+    }
+    if (filters.sentiment) {
+      params.push(filters.sentiment);
+      clauses.push(`sentiment = $${params.length}`);
+    }
+    if (filters.priority) {
+      params.push(filters.priority);
+      clauses.push(`priority = $${params.length}`);
+    }
+    if (filters.q) {
+      params.push(`%${filters.q.toLowerCase()}%`);
+      clauses.push(
+        `LOWER(COALESCE(title, '') || ' ' || body || ' ' || array_to_string(keywords, ' ') || ' ' || array_to_string(topics, ' ')) LIKE $${params.length}`
+      );
+    }
+    if (filters.from) {
+      params.push(new Date(filters.from));
+      clauses.push(`occurred_at >= $${params.length}`);
+    }
+    if (filters.to) {
+      params.push(new Date(filters.to));
+      clauses.push(`occurred_at <= $${params.length}`);
+    }
+    let limitClause = "";
+    let offsetClause = "";
+
+    const definitions = await listEnrichmentDefinitions();
+    const enabledSlugs = new Set(
+      definitions
+        .filter((definition) => options.includeDisabled || definition.isEnabled)
+        .map((definition) => definition.slug)
+    );
+
+    if (typeof options.limit === "number") {
+      params.push(options.limit);
+      limitClause = `LIMIT $${params.length}`;
+    }
+
+    if (typeof options.offset === "number") {
+      params.push(options.offset);
+      offsetClause = `OFFSET $${params.length}`;
+    }
+
+    const result = await pool.query<MentionEnrichedRow>(
+      `
+        SELECT *
+        FROM mention_enriched_v1
+        ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+        ORDER BY occurred_at DESC
+        ${limitClause}
+        ${offsetClause}
+      `,
+      params
+    );
+
+    return result.rows.map((row) => {
+      const mapped = mapEnrichedMention(row);
+      return {
+        ...mapped,
+        enrichments: Object.fromEntries(
+          Object.entries(mapped.enrichments).filter(([slug]) =>
+            enabledSlugs.has(slug)
+          )
+        )
+      };
+    });
+  };
+
+  const getMentionEnrichments: Repository["getMentionEnrichments"] = async (
+    session,
+    mentionId,
+    options = {}
+  ) => {
+    await ensureReady();
+    const pool = getPool();
+    const clauses = ["id = $1"];
+    const params: unknown[] = [mentionId];
+    const scopedAgencyIds = visibleAgencyIds(session);
+
+    if (scopedAgencyIds) {
+      params.push(scopedAgencyIds);
+      clauses.push(`agency_id = ANY($${params.length}::text[])`);
+    }
+
+    const definitions = await listEnrichmentDefinitions();
+    const enabledSlugs = new Set(
+      definitions
+        .filter((definition) => options.includeDisabled || definition.isEnabled)
+        .map((definition) => definition.slug)
+    );
+
+    const result = await pool.query<MentionEnrichedRow>(
+      `
+        SELECT *
+        FROM mention_enriched_v1
+        WHERE ${clauses.join(" AND ")}
+        LIMIT 1
+      `,
+      params
+    );
+    const row = result.rows[0];
+    const mapped = row ? mapEnrichedMention(row) : undefined;
+    const mention = mapped
+      ? {
+          ...mapped,
+          enrichments: Object.fromEntries(
+            Object.entries(mapped.enrichments).filter(([slug]) =>
+              enabledSlugs.has(slug)
+            )
+          )
+        }
+      : undefined;
+
+    if (!mention) {
+      throw new Error(`Mention ${mentionId} not found`);
+    }
+    return mention;
+  };
+
+  const listEnrichmentRollups: Repository["listEnrichmentRollups"] = async (
+    session,
+    filters
+  ) => {
+    await ensureReady();
+    const pool = getPool();
+    const scopedAgencyIds = visibleAgencyIds(session);
+    const params: unknown[] = [];
+    const clauses: string[] = [];
+
+    if (scopedAgencyIds) {
+      params.push(scopedAgencyIds);
+      clauses.push(`agency_id = ANY($${params.length}::text[])`);
+    }
+    if (filters.agencyId) {
+      params.push(filters.agencyId);
+      clauses.push(`agency_id = $${params.length}`);
+    }
+    params.push(filters.groupBy);
+    clauses.push(`group_by = $${params.length}`);
+    if (filters.window === "batch" && filters.batchId) {
+      params.push(filters.batchId);
+      clauses.push(`batch_id = $${params.length}`);
+    }
+
+    const sourceView =
+      filters.window === "24h"
+        ? "mention_rollup_24h_v1"
+        : filters.window === "7d"
+          ? "mention_rollup_7d_v1"
+          : "mention_rollup_batch_v1";
+
+    const result = await pool.query<RollupRow>(
+      `
+        SELECT agency_id, batch_id, query_id, group_by, group_key, values
+        FROM ${sourceView}
+        ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+        ORDER BY group_key ASC
+      `,
+      params
+    );
+
+    return result.rows.map((row) => mapRollup(row, filters.window));
   };
 
   const listAlerts: Repository["listAlerts"] = async (session, agencyId) => {
@@ -1396,6 +1744,13 @@ export const createPostgresRepository = (): Repository => {
       ]
     );
 
+    const artifactsClient = await pool.connect();
+    try {
+      await ensureEnrichmentArtifacts(artifactsClient);
+    } finally {
+      artifactsClient.release();
+    }
+
     return {
       insertedCount,
       duplicateCount,
@@ -1717,6 +2072,8 @@ export const createPostgresRepository = (): Repository => {
         ]
       );
 
+      await ensureEnrichmentArtifacts(client);
+
       await client.query("COMMIT");
 
       return {
@@ -1740,7 +2097,11 @@ export const createPostgresRepository = (): Repository => {
   return {
     ready: ensureReady,
     getDashboardSummary,
+    listEnrichmentDefinitions,
     listMentions,
+    listMentionsEnriched,
+    getMentionEnrichments,
+    listEnrichmentRollups,
     listAlerts,
     listCases,
     listAgencies,

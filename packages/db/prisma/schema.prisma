@@ -283,6 +283,24 @@ model MentionAttribute {
   @@map("mention_attributes")
 }
 
+model EnrichmentDefinition {
+  code           String   @id
+  slug           String   @unique
+  label          String
+  category       String
+  grain          String
+  valueType      String   @map("value_type")
+  isEnabled      Boolean  @default(true) @map("is_enabled")
+  dependsOn      Json     @map("depends_on")
+  sourceCoverage String   @map("source_coverage")
+  nullPolicy     String   @map("null_policy")
+  description    String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("enrichment_definitions")
+}
+
 model Alert {
   id          String          @id
   agencyId    String          @map("agency_id")

@@ -13,9 +13,10 @@ export default defineConfig({
     trace: "on-first-retry"
   },
   webServer: {
-    command: "pnpm --filter @sac/web dev",
+    command: "pnpm --filter @sac/web start --hostname 127.0.0.1 --port 3000",
     cwd: path.resolve(__dirname, "../.."),
     url: "http://127.0.0.1:3000",
+    timeout: 120_000,
     reuseExistingServer: true
   }
 });

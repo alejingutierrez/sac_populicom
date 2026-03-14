@@ -25,6 +25,12 @@
   - perfil generado: [`docs/brandwatch-export/profile.md`](/Volumes/MyApps/sac_populicom/docs/brandwatch-export/profile.md)
   - diccionario: [`docs/brandwatch-export/data-dictionary.md`](/Volumes/MyApps/sac_populicom/docs/brandwatch-export/data-dictionary.md)
   - runbook: [`docs/brandwatch-export/ingestion-runbook.md`](/Volumes/MyApps/sac_populicom/docs/brandwatch-export/ingestion-runbook.md)
+- Capa actual de enriquecimientos:
+  - catálogo: [`docs/enrichments/catalog.md`](/Volumes/MyApps/sac_populicom/docs/enrichments/catalog.md)
+  - fórmulas: [`docs/enrichments/formulas.md`](/Volumes/MyApps/sac_populicom/docs/enrichments/formulas.md)
+  - API interna: [`docs/enrichments/api.md`](/Volumes/MyApps/sac_populicom/docs/enrichments/api.md)
+  - total de derivadas habilitadas por defecto: `100`
+  - artefactos persistidos: tabla `enrichment_definitions` + vistas `mention_enriched_v1`, `mention_rollup_24h_v1`, `mention_rollup_7d_v1`, `mention_rollup_batch_v1`
 
 ## Reglas operativas para futuros agentes
 
@@ -37,6 +43,8 @@
 - Para deduplicación de menciones del export, usar siempre `Mention Id -> Resource Id -> Url`.
 - Si el frontend en Amplify debe leer PostgreSQL, confirmar que `DATABASE_URL` esté configurado explícitamente en el runtime SSR.
 - Si se necesita verificar Lambdas del stack desde esta máquina sin `aws` CLI, usar `pnpm brandwatch:invoke-import` y `pnpm stack:invoke-lambda`.
+- Si se cambia el catálogo o una fórmula, regenerar `docs/enrichments` con `pnpm enrichments:docs`.
+- `GET /api/mentions` sigue siendo el contrato compatible; la capa nueva entra por `GET /api/mentions/enriched`, `GET /api/mentions/:id/enrichments`, `GET /api/enrichments/catalog` y `GET /api/enrichments/rollups`.
 
 ## Validación mínima esperada
 

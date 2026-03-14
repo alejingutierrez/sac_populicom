@@ -13,6 +13,11 @@ import {
   createSeedData,
   now
 } from "./seed";
+import {
+  buildEnrichedMentions,
+  buildEnrichmentRollups,
+  enrichmentDefinitions
+} from "./enrichments";
 import type {
   Alert,
   BrandwatchSyncRun,
@@ -21,6 +26,11 @@ import type {
   CaseEvent,
   CreateCaseInput,
   DashboardSummary,
+  EnrichedMention,
+  EnrichmentDefinition,
+  EnrichmentListOptions,
+  EnrichmentRollup,
+  EnrichmentRollupFilters,
   ImportResult,
   MentionFilters,
   NormalizedMention,
@@ -75,6 +85,14 @@ export const createMemoryRepository = (
   seed: RepositorySeed = createSeedData()
 ) => {
   const state = structuredClone(seed);
+  const importContextByMentionId = new Map<
+    string,
+    {
+      batchId?: string;
+      queryId?: string;
+      rawPayload?: BrandwatchWorkbookImportInput["items"][number]["rawRow"]["rawPayload"];
+    }
+  >();
 
   const visibleAgencyIds = (session: SessionContext) =>
     session.role === "admin"
@@ -99,6 +117,75 @@ export const createMemoryRepository = (
       .filter((mention) => visibleAgencyIds(session).includes(mention.agencyId))
       .filter((mention) => matchesMentionFilters(mention, filters))
       .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+
+  const listEnrichmentDefinitions = (): EnrichmentDefinition[] =>
+    enrichmentDefinitions;
+
+  const buildScopedEnrichedMentions = (
+    session: SessionContext,
+    filters: MentionFilters = {},
+    options: EnrichmentListOptions = {}
+  ): EnrichedMention[] => {
+    const records = buildEnrichedMentions(
+      listMentions(session, filters).map((mention) => ({
+        mention,
+        batchId: importContextByMentionId.get(mention.id)?.batchId,
+        queryId: importContextByMentionId.get(mention.id)?.queryId,
+        rawPayload: importContextByMentionId.get(mention.id)?.rawPayload
+      })),
+      options.includeDisabled
+    );
+    const offset = options.offset ?? 0;
+    const limit =
+      typeof options.limit === "number"
+        ? Math.max(options.limit, 0)
+        : undefined;
+
+    return typeof limit === "number"
+      ? records.slice(offset, offset + limit)
+      : records.slice(offset);
+  };
+
+  const listMentionsEnriched = (
+    session: SessionContext,
+    filters: MentionFilters = {},
+    options: EnrichmentListOptions = {}
+  ): EnrichedMention[] =>
+    buildScopedEnrichedMentions(session, filters, options);
+
+  const getMentionEnrichments = (
+    session: SessionContext,
+    mentionId: string,
+    options: Pick<EnrichmentListOptions, "includeDisabled"> = {}
+  ): EnrichedMention => {
+    findScopedMention(session, mentionId);
+    const enriched = buildScopedEnrichedMentions(session, {}, options).find(
+      (record) => record.id === mentionId
+    );
+
+    if (!enriched) {
+      throw new Error(`Mention ${mentionId} not found`);
+    }
+
+    return enriched;
+  };
+
+  const listEnrichmentRollups = (
+    session: SessionContext,
+    filters: EnrichmentRollupFilters
+  ): EnrichmentRollup[] =>
+    buildEnrichmentRollups(
+      buildScopedEnrichedMentions(
+        session,
+        {
+          agencyId: filters.agencyId
+        },
+        {
+          includeDisabled: filters.includeDisabled
+        }
+      ),
+      filters
+    );
 
   const listAlerts = (session: SessionContext, agencyId?: string) =>
     state.alerts
@@ -395,6 +482,15 @@ export const createMemoryRepository = (
   const importBrandwatchWorkbook = (
     input: BrandwatchWorkbookImportInput
   ): Promise<ImportResult> => {
+    const batchId = createId("batch");
+    for (const item of input.items) {
+      importContextByMentionId.set(item.mention.id, {
+        batchId,
+        queryId: item.sourceQueryExternalId,
+        rawPayload: item.rawRow.rawPayload
+      });
+    }
+
     const result = upsertMentions(
       input.items.map((item) => item.mention),
       {
@@ -407,7 +503,7 @@ export const createMemoryRepository = (
     );
 
     return Promise.resolve({
-      batchId: createId("batch"),
+      batchId,
       rowsRead: input.items.length,
       rowsInserted: input.items.length,
       rowsDeduped: result.duplicateCount,
@@ -425,7 +521,11 @@ export const createMemoryRepository = (
     state,
     ready: () => Promise.resolve(undefined),
     getDashboardSummary,
+    listEnrichmentDefinitions,
     listMentions,
+    listMentionsEnriched,
+    getMentionEnrichments,
+    listEnrichmentRollups,
     listAlerts,
     listCases,
     listAgencies,
