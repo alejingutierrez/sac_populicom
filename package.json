@@ -21,6 +21,8 @@
     "prepare": "husky",
     "db:generate": "pnpm --filter @sac/db db:generate",
     "db:migrate": "pnpm --filter @sac/db db:migrate",
+    "amplify:status": "tsx ./scripts/amplify-status.ts",
+    "amplify:start-job": "tsx ./scripts/amplify-start-job.ts",
     "brandwatch:profile": "tsx ./scripts/profile-brandwatch-export.ts",
     "brandwatch:import": "tsx ./scripts/import-brandwatch-export.ts",
     "brandwatch:invoke-import": "tsx ./scripts/invoke-brandwatch-import.ts",
@@ -30,6 +32,7 @@
     "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml,css}": "prettier --write"
   },
   "devDependencies": {
+    "@aws-sdk/client-amplify": "^3.925.0",
     "@aws-sdk/client-cloudformation": "^3.925.0",
     "@aws-sdk/client-lambda": "^3.925.0",
     "@commitlint/cli": "^20.1.0",
