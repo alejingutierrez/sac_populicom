@@ -2887,6 +2887,16 @@ export const buildMentionEnrichedViewSql = () => {
     `'${definition.slug}'`,
     `base.${definition.slug}`
   ]);
+  const jsonChunks: string[] = [];
+  for (let index = 0; index < jsonPairs.length; index += 80) {
+    jsonChunks.push(
+      `JSONB_BUILD_OBJECT(${jsonPairs.slice(index, index + 80).join(", ")})`
+    );
+  }
+  const enrichmentsExpression =
+    jsonChunks.length === 1
+      ? `JSONB_STRIP_NULLS(${jsonChunks[0]})`
+      : `JSONB_STRIP_NULLS(${jsonChunks.join(" || ")})`;
 
   return `
 CREATE OR REPLACE VIEW mention_enriched_v1 AS
@@ -2978,7 +2988,7 @@ SELECT
   base.source_query_id,
   base.country,
   base.local_date_key,
-  JSONB_STRIP_NULLS(JSONB_BUILD_OBJECT(${jsonPairs.join(", ")})) AS enrichments,
+  ${enrichmentsExpression} AS enrichments,
   JSONB_BUILD_OBJECT(
     'batchId', base.import_batch_id,
     'queryId', base.source_query_id,
