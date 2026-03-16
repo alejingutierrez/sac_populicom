@@ -9,10 +9,12 @@
 ## Referencias vivas
 
 - Repositorio GitHub: `git@github.com:alejingutierrez/sac_populicom.git`
-- Región AWS por defecto: `us-east-1`
+- Región AWS por defecto del stack principal: `us-east-1`
+- Región real de Amplify Hosting: `us-east-2`
 - Amplify ya fue creado y conectado al repositorio.
 - URL actual de la rama `main` en Amplify: `https://main.d3adx7sp1dipb1.amplifyapp.com`
 - Esta referencia fue confirmada por el usuario el `2026-03-13`.
+- El `appId` de Amplify `d3adx7sp1dipb1` vive en `us-east-2`, no en `us-east-1`.
 - Stack AWS desplegado de referencia: `SacPlatformProd`
 - Buckets activos:
   - raw/imports: `sac-populicom-raw`
@@ -39,6 +41,7 @@
 - Si se ajustan dominios, callbacks o variables públicas del frontend, alinear cualquier configuración con la URL actual de Amplify.
 - Mantener secretos fuera del repo. Usar `.env` local solo para trabajo local y `AWS Secrets Manager` o `SSM` para despliegues.
 - Antes de cambios en infraestructura, verificar el estado real en AWS; no asumir que el estado del repo refleja el estado desplegado.
+- Si se revisa Amplify, consultar primero `us-east-2`; el stack principal y la base siguen en `us-east-1`.
 - El parser del export Brandwatch detecta el header por firma de columnas; no asumir filas fijas sin validar el archivo real.
 - Para deduplicación de menciones del export, usar siempre `Mention Id -> Resource Id -> Url`.
 - Si el frontend en Amplify debe leer PostgreSQL, confirmar que `DATABASE_URL` esté configurado explícitamente en el runtime SSR.
