@@ -414,21 +414,41 @@ export class SacPlatformStack extends cdk.Stack {
               "version: 1",
               "applications:",
               "  - appRoot: apps/web",
+              "    env:",
+              "      variables:",
+              "        AMPLIFY_MONOREPO_APP_ROOT: apps/web",
               "    frontend:",
+              "      buildPath: /",
               "      phases:",
               "        preBuild:",
               "          commands:",
-              "            - corepack enable",
+              "            - npm install -g pnpm@10.32.0",
               "            - pnpm install --frozen-lockfile",
               "        build:",
               "          commands:",
+              "            - rm -f apps/web/.env.production",
+              "            - env | grep -e APP_ENV -e AWS_REGION -e AWS_DEFAULT_REGION -e DATABASE_URL -e DATABASE_SSL >> apps/web/.env.production || true",
+              "            - env | grep -e NEXT_PUBLIC_ >> apps/web/.env.production || true",
               "            - pnpm --filter @sac/web build",
               "      artifacts:",
-              "        baseDirectory: .next",
+              "        baseDirectory: apps/web/.next",
               "        files:",
-              "          - '**/*'"
+              "          - '**/*'",
+              "      cache:",
+              "        paths:",
+              "          - node_modules/**/*",
+              "          - .pnpm-store/**/*",
+              "          - apps/web/.next/cache/**/*"
             ].join("\n"),
             environmentVariables: [
+              {
+                name: "AMPLIFY_MONOREPO_APP_ROOT",
+                value: "apps/web"
+              },
+              {
+                name: "APP_ENV",
+                value: "production"
+              },
               {
                 name: "AWS_REGION",
                 value: props.env?.region ?? cdk.Aws.REGION
@@ -436,6 +456,10 @@ export class SacPlatformStack extends cdk.Stack {
               {
                 name: "NEXT_PUBLIC_APP_NAME",
                 value: "SAC Populicom"
+              },
+              {
+                name: "NEXT_PUBLIC_DEFAULT_AGENCY_ID",
+                value: props.defaultAgencyId
               },
               {
                 name: "NEXT_PUBLIC_BASE_URL",
